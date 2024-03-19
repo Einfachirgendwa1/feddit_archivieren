@@ -10,6 +10,52 @@
 //! - Der zweite Thread wartet auf Daten im Channel und fetch dann archive.org.
 //! - Alles was in den Channel rein- und rausgeht, wird in der Speicherdatei dokumentiert.
 
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
+
+/// Struct für den Speicherstand.
+/// Enthält die URL zu der nächsten feddit-Seite als String,
+/// und die aktuellen noch im Channel gespeicherte PostIDs als u128s.
+#[derive(Debug)]
+struct Speicherstand {
+    url: String,
+    post_ids: Vec<u128>,
+}
+
 fn main() {
-    println!("Hello, world!");
+    dbg!(read_save());
+}
+
+/// Diese Funktion versucht den Speicherstand zu lesen.
+/// Bei Erfolg wird der Speicherstand konstruiert und zurückgegeben.
+/// Wenn irgendwo ein Fehler aufgetreten ist, wird `None` zurückgegeben.
+fn read_save() -> Option<Speicherstand> {
+    let file = match File::open("savefile.txt") {
+        Ok(file) => file,
+        Err(_) => return None,
+    };
+    let mut line_iterator = BufReader::new(file).lines();
+    let url = match line_iterator.next() {
+        Some(Ok(url)) => url,
+        _ => return None,
+    };
+
+    let mut post_ids = vec![];
+    for line in line_iterator {
+        let line = match line {
+            Ok(line) => line,
+            Err(_) => return None,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        post_ids.push(match line.parse::<u128>() {
+            Ok(id) => id,
+            Err(_) => return None,
+        });
+    }
+
+    Some(Speicherstand { url, post_ids })
 }
