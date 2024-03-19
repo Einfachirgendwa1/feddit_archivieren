@@ -10,6 +10,10 @@
 //! - Der zweite Thread wartet auf Daten im Channel und fetch dann archive.org.
 //! - Alles was in den Channel rein- und rausgeht, wird in der Speicherdatei dokumentiert.
 
+//! Funktionen:
+//!     read_save
+//!     write_save
+
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
