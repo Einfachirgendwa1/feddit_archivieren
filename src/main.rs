@@ -12,7 +12,7 @@
 
 use std::{
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
 };
 
 /// Struct für den Speicherstand.
@@ -24,8 +24,26 @@ struct Speicherstand {
     post_ids: Vec<u128>,
 }
 
+impl Speicherstand {
+    /// Erstellt einen neuen, leeren Speicherstand.
+    fn new() -> Self {
+        Speicherstand {
+            url: String::new(),
+            post_ids: Vec::new(),
+        }
+    }
+}
+
 fn main() {
-    dbg!(read_save());
+    let mut save = match read_save() {
+        Some(save) => save,
+        None => {
+            if write_save(&Speicherstand::new()).is_none() {
+                panic!("Fehler beim Schreiben des Speicherstands");
+            }
+            Speicherstand::new()
+        }
+    };
 }
 
 /// Diese Funktion versucht den Speicherstand zu lesen.
@@ -58,4 +76,28 @@ fn read_save() -> Option<Speicherstand> {
     }
 
     Some(Speicherstand { url, post_ids })
+}
+
+/// Diese Funktion schreibt den Speicherstand.
+/// * `speicherstand`: Der Speicherstand, der gespeichert werden soll.
+fn write_save(speicherstand: &Speicherstand) -> Option<()> {
+    let mut file = match File::create("savefile.txt") {
+        Ok(file) => file,
+        Err(_) => return None,
+    };
+
+    if file
+        .write_all(format!("{}\n", speicherstand.url).as_bytes())
+        .is_err()
+    {
+        return None;
+    }
+
+    for post_id in speicherstand.post_ids.iter() {
+        if file.write_all(format!("{}\n", post_id).as_bytes()).is_err() {
+            return None;
+        }
+    }
+
+    Some(())
 }
