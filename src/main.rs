@@ -23,6 +23,8 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
+    sync::{Arc, Mutex},
+    thread,
 };
 
 /// Struct für den Speicherstand.
@@ -45,7 +47,7 @@ impl Speicherstand {
 }
 
 fn main() {
-    let mut _save = match read_save() {
+    let mut speicherstand = Arc::new(Mutex::new(match read_save() {
         Some(save) => save,
         None => {
             if write_save(&Speicherstand::new()).is_none() {
@@ -53,7 +55,14 @@ fn main() {
             }
             Speicherstand::new()
         }
-    };
+    }));
+
+    let mut clone = speicherstand.clone();
+    let feddit = thread::spawn(move || feddit_thread(&mut clone));
+    let archive = thread::spawn(move || archive_thread(&mut speicherstand));
+
+    feddit.join().unwrap();
+    archive.join().unwrap();
 }
 
 /// Diese Funktion versucht den Speicherstand zu lesen.
@@ -110,4 +119,12 @@ fn write_save(speicherstand: &Speicherstand) -> Option<()> {
     }
 
     Some(())
+}
+
+fn feddit_thread(_speicherstand: &mut Arc<Mutex<Speicherstand>>) {
+    todo!()
+}
+
+fn archive_thread(_speicherstand: &mut Arc<Mutex<Speicherstand>>) {
+    todo!()
 }
