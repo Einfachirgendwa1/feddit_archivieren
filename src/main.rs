@@ -6,9 +6,7 @@
 //!     - Zudem geben wir eine Fehlermeldung aus.
 //! - Dann erstellen wir 2 Threads:
 //! - Der erste fetcht Feddit und extrahiert die Daten.
-//! - Diese sendet er dann über einen Channel an den zweiten Thread.
-//! - Der zweite Thread wartet auf Daten im Channel und fetch dann archive.org.
-//! - Alles was in den Channel rein- und rausgeht, wird in der Speicherdatei dokumentiert.
+//! - Die Kommunikation erfolgt über einen Arc<Mutex<Speicherstand>>.
 
 //! Funktionen:
 //!     read_save
@@ -18,7 +16,10 @@
 //!         -> feddit_extract
 //!         -> feddit_handle
 //!             -> feddit_sync
-//!             -> feddit_send
+//!
+//!     archive_thread
+//!         -> archive_thread
+//!         -> archive_sync
 
 use std::{
     fs::File,
