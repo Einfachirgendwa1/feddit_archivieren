@@ -14,8 +14,7 @@
 //!     feddit_thread
 //!         -> feddit_fetch
 //!         -> feddit_extract
-//!         -> feddit_handle
-//!             -> feddit_sync
+//!         -> feddit_sync
 //!
 //!     archive_thread
 //!         -> archive_thread
@@ -28,13 +27,21 @@ use std::{
     thread,
 };
 
+use reqwest::blocking::get;
+
 /// Struct für den Speicherstand.
 /// Enthält die URL zu der nächsten feddit-Seite als String,
-/// und die aktuellen noch im Channel gespeicherte PostIDs als u128s.
+/// und die aktuell noch nicht archivierten PostIDs als u128s.
 #[derive(Debug)]
 struct Speicherstand {
     url: String,
     post_ids: Vec<u128>,
+}
+
+/// Enum welches vom Feddit-Thread bei dem Stellen von Netzwerkanfragen verwendet wird.
+enum NetzwerkError {
+    RequestError(reqwest::Error),
+    StatusError(String),
 }
 
 impl Speicherstand {
@@ -122,8 +129,42 @@ fn write_save(speicherstand: &Speicherstand) -> Option<()> {
     Some(())
 }
 
-fn feddit_thread(_speicherstand: &mut Arc<Mutex<Speicherstand>>) {
+/// Funktion welche dauerhaft von dem feddit-Thread aufgerufen wird.
+fn feddit_thread(speicherstand: &mut Arc<Mutex<Speicherstand>>) {
+    let page_content = match feddit_fetch(&mut speicherstand.clone()) {
+        Ok(page_content) => page_content,
+        Err(_err) => {
+            todo!()
+        }
+    };
+    feddit_extract(page_content, &mut speicherstand.clone());
+    feddit_sync(&mut speicherstand.clone());
+}
+
+/// Funktion welche die aktuelle URL extrahiert und versucht zu fetchen.
+/// * `return` Das Ergebnis der request an die URL
+fn feddit_fetch(speicherstand: &mut Arc<Mutex<Speicherstand>>) -> Result<String, NetzwerkError> {
+    let url = speicherstand.lock().unwrap().url.clone();
+    match get(url) {
+        Ok(response) => {
+            if response.status().is_success() {
+                Ok(response.text().unwrap())
+            } else {
+                Err(NetzwerkError::StatusError(response.status().to_string()))
+            }
+        }
+        Err(err) => Err(NetzwerkError::RequestError(err)),
+    }
+}
+
+fn feddit_extract(_content: String, _speicherstand: &mut Arc<Mutex<Speicherstand>>) {
     todo!()
+}
+
+fn feddit_sync(speicherstand: &mut Arc<Mutex<Speicherstand>>) {
+    if write_save(&speicherstand.lock().unwrap()).is_none() {
+        panic!("Fehler beim Schreiben des Speicherstands.");
+    }
 }
 
 fn archive_thread(_speicherstand: &mut Arc<Mutex<Speicherstand>>) {
