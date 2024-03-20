@@ -13,6 +13,12 @@
 //! Funktionen:
 //!     read_save
 //!     write_save
+//!     feddit_thread
+//!         -> feddit_fetch
+//!         -> feddit_extract
+//!         -> feddit_handle
+//!             -> feddit_sync
+//!             -> feddit_send
 
 use std::{
     fs::File,
@@ -39,11 +45,11 @@ impl Speicherstand {
 }
 
 fn main() {
-    let mut save = match read_save() {
+    let mut _save = match read_save() {
         Some(save) => save,
         None => {
             if write_save(&Speicherstand::new()).is_none() {
-                panic!("Fehler beim Schreiben des Speicherstands");
+                panic!("Fehler beim Schreiben des Speicherstands.");
             }
             Speicherstand::new()
         }
