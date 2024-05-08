@@ -1,39 +1,23 @@
 extern crate daemonize;
 
 use daemonize::Daemonize;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader, Write},
-    net::TcpListener,
-    path::Path,
-    process::exit,
-};
+use std::{fs::File, io::Write, net::TcpListener, process::exit};
+
+mod helpers;
+
+use crate::helpers::{daemon_running, pid_file_exists};
 
 fn main() {
     // Überprüfen ob bereits ein Daemon läuft
-    let pidfile = Path::new("daemon.pid");
-    if pidfile.exists() {
+    if pid_file_exists() {
         println!("PID Datei existiert.");
-
-        let pid =
-            BufReader::new(File::open("daemon.pid").expect("Fehler beim Öffnen der PID Datei."))
-                .lines()
-                .next()
-                .expect("Die PID Datei ist leer.")
-                .expect("Die PID Datei ist korrupiert.");
-
-        if Path::new(&format!("/proc/{}", pid)).exists() {
-            println!("Der Daemon läuft bereits mit der PID {}!", pid);
-        } else {
+        if daemon_running() {
             println!(
-                "Der dort aufgeführte Prozess ({}) scheint nicht zu existieren.",
-                pid
+                "Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden."
             );
+            // TODO: println!("Starte mit --force um das Starten zu erzwingen.");
+            exit(1);
         }
-
-        println!("Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden.");
-        println!("INFO: Starte mit --force um das Starten zu erzwingen.");
-        exit(1);
     }
 
     // Den Daemon erstellen und starten
