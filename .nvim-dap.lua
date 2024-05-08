@@ -8,7 +8,7 @@ dap.adapters.lldb = {
 
 dap.configurations.rust = {
 	{
-		name = "hello-world",
+		name = "feddit_archivieren",
 		type = "lldb",
 		request = "launch",
 		program = function()
