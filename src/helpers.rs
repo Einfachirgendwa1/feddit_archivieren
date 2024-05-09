@@ -1,9 +1,12 @@
 use std::{
-    fs::File,
+    fs::{metadata, File},
     io::{BufRead, BufReader},
+    os::unix::fs::PermissionsExt,
     path::Path,
     process::exit,
 };
+
+use crate::settings::PID_FILE;
 
 #[allow(dead_code)]
 pub fn feddit_archivieren_assert(condition: bool, message: &str) {
@@ -14,7 +17,7 @@ pub fn feddit_archivieren_assert(condition: bool, message: &str) {
 }
 
 pub fn pid_file_exists() -> bool {
-    Path::new("daemon.pid").exists()
+    Path::new(PID_FILE).exists()
 }
 
 #[allow(dead_code)]
@@ -23,7 +26,7 @@ pub fn read_pid_file() -> String {
         pid_file_exists(),
         "Versuche PID Datei zu lesen, sie existiert aber nicht.",
     );
-    BufReader::new(File::open("daemon.pid").unwrap())
+    BufReader::new(File::open(PID_FILE).unwrap())
         .lines()
         .filter_map(Result::ok)
         .next()
@@ -34,7 +37,7 @@ pub fn daemon_running() -> bool {
     if pid_file_exists() {
         Path::new(&format!(
             "/proc/{}",
-            BufReader::new(File::open("daemon.pid").expect("Fehler beim Öffnen der PID Datei."))
+            BufReader::new(File::open(PID_FILE).expect("Fehler beim Öffnen der PID Datei."))
                 .lines()
                 .next()
                 .expect("Die PID Datei ist leer.")

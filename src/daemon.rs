@@ -4,10 +4,20 @@ use daemonize::Daemonize;
 use std::{fs::File, io::Write, net::TcpListener, process::exit};
 
 mod helpers;
+mod settings;
 
-use crate::helpers::{daemon_running, pid_file_exists};
+use crate::{
+    helpers::{daemon_running, pid_file_exists},
+    settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
+};
 
 fn main() {
+    // Überprüfen ob wir root sind
+    if users::get_current_uid() != 0 {
+        println!("Der Daemon muss als root gestartet werden!");
+        exit(1);
+    }
+
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -21,11 +31,11 @@ fn main() {
     }
 
     // Den Daemon erstellen und starten
-    let stdout = File::create("daemon.out").unwrap();
-    let stderr = File::create("daemon.err").unwrap();
+    let stdout = File::create(OUT_FILE).unwrap();
+    let stderr = File::create(ERR_FILE).unwrap();
 
     let daemonize = Daemonize::new()
-        .pid_file("daemon.pid")
+        .pid_file(PID_FILE)
         .working_directory(".")
         .stdout(stdout)
         .stderr(stderr);
@@ -45,8 +55,8 @@ fn main() {
 
     println!("Erfolgreich an einen Socket gebunden.");
 
-    // Unsere Socketadresse in daemon.sck schreiben
-    let mut socketfile = File::create("daemon.sck").unwrap();
+    // Unsere Socketadresse ins Socketfile schreiben
+    let mut socketfile = File::create(SOCKET_FILE).unwrap();
     socketfile
         .write_all(socket.to_string().as_bytes())
         .expect("Fehler beim Schreiben ins Socketfile.");
