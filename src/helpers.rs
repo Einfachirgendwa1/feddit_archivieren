@@ -1,7 +1,6 @@
 use std::{
-    fs::{metadata, File},
+    fs::{File},
     io::{BufRead, BufReader},
-    os::unix::fs::PermissionsExt,
     path::Path,
     process::exit,
 };

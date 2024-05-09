@@ -1,6 +1,6 @@
 use std::{
     env::args,
-    fs::create_dir,
+    fs::{create_dir, remove_dir_all},
     io::BufRead,
     path::Path,
     process::{exit, Command, Output},
@@ -20,33 +20,28 @@ fn main() {
 
     match args.get(1).unwrap().as_str() {
         "install" => {
-            if users::get_current_uid() == 0 {
-                if daemon_running() {
-                    println!("Es läuft aktuell schon ein Daemon!");
-                    exit(1);
-                }
-
-                if !Path::new(settings::RUN_DIR).exists() {
-                    let result = create_dir(settings::RUN_DIR);
-                    if result.is_err() {
-                        println!(
-                            "Fehler beim Erstellen von {}: {}",
-                            settings::RUN_DIR,
-                            result.unwrap_err()
-                        );
-                    }
-                }
-
-                copy_file("target/debug/daemon", settings::DAEMON_PATH);
-                chmod(settings::DAEMON_PATH, "777");
-                copy_file("target/debug/client", settings::CLIENT_PATH);
-                chmod(settings::CLIENT_PATH, "777");
-
-                println!("Installation erfolgreich!");
-            } else {
-                println!("Die Installation kopiert u.a. Dinge in /usr/bin, weshalb sie als root ausgeführt werden muss.");
+            if daemon_running() {
+                println!("Es läuft aktuell schon ein Daemon!");
                 exit(1);
             }
+
+            if !Path::new(settings::RUN_DIR).exists() {
+                let result = create_dir(settings::RUN_DIR);
+                if result.is_err() {
+                    println!(
+                        "Fehler beim Erstellen von {}: {}",
+                        settings::RUN_DIR,
+                        result.unwrap_err()
+                    );
+                }
+            }
+
+            copy_file("target/debug/daemon", settings::DAEMON_PATH);
+            chmod(settings::DAEMON_PATH, "777");
+            copy_file("target/debug/client", settings::CLIENT_PATH);
+            chmod(settings::CLIENT_PATH, "777");
+
+            println!("Installation erfolgreich!");
         }
         "start" => {
             feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft bereits.");
@@ -93,46 +88,50 @@ fn main() {
                         result.unwrap_err()
                     );
                 }
-                match Command::new("git")
-                    .arg("clone")
-                    .arg(settings::GITHUB_LINK)
-                    .arg(settings::UDPATE_TMP_DIR)
-                    .output()
-                {
-                    Ok(output) => {
-                        dbg!(&output);
-                        println!("{}", command_output_formater(&output));
-                        if !output.status.success() {
-                            println!("Fehler beim Klonen.");
-                            exit(1);
-                        }
-                    }
-                    Err(err) => {
-                        println!(
-                            "Fehler beim Klonen von {} nach {}: {}",
-                            settings::GITHUB_LINK,
-                            settings::UDPATE_TMP_DIR,
-                            err
-                        );
-                    }
-                }
-                match Command::new("make")
-                    .current_dir(settings::UDPATE_TMP_DIR)
-                    .arg("clean")
-                    .arg("install")
-                    .output()
-                {
-                    Ok(output) => {
-                        println!("{}", command_output_formater(&output));
-                        if !output.status.success() {
-                            println!("Fehler bei der Installation.");
-                            exit(1);
-                        }
-                    }
-                    Err(err) => {
-                        println!("Fehler bei der Installation: {}", err);
+            } else {
+                assert!(settings::UDPATE_TMP_DIR != "/");
+                remove_dir_all(settings::UDPATE_TMP_DIR).expect(
+                    format!("Fehler beim Löschen von {}.", settings::UDPATE_TMP_DIR).as_str(),
+                );
+            }
+            match Command::new("git")
+                .arg("clone")
+                .arg(settings::GITHUB_LINK)
+                .arg(settings::UDPATE_TMP_DIR)
+                .output()
+            {
+                Ok(output) => {
+                    println!("{}", command_output_formater(&output));
+                    if !output.status.success() {
+                        println!("Fehler beim Klonen.");
                         exit(1);
                     }
+                }
+                Err(err) => {
+                    println!(
+                        "Fehler beim Klonen von {} nach {}: {}",
+                        settings::GITHUB_LINK,
+                        settings::UDPATE_TMP_DIR,
+                        err
+                    );
+                }
+            }
+            match Command::new("make")
+                .current_dir(settings::UDPATE_TMP_DIR)
+                .arg("clean")
+                .arg("install")
+                .output()
+            {
+                Ok(output) => {
+                    println!("{}", command_output_formater(&output));
+                    if !output.status.success() {
+                        println!("Fehler bei der Installation.");
+                        exit(1);
+                    }
+                }
+                Err(err) => {
+                    println!("Fehler bei der Installation: {}", err);
+                    exit(1);
                 }
             }
         }
