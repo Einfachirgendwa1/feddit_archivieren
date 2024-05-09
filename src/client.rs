@@ -1,12 +1,13 @@
 use std::{
     env::args,
     fs::{create_dir, remove_dir_all},
-    io::BufRead,
     path::Path,
-    process::{exit, Command, Output},
+    process::{exit, Command},
 };
 
-use helpers::{daemon_running, feddit_archivieren_assert, read_pid_file};
+use helpers::{daemon_running, feddit_archivieren_assert, read_pid_file, run_install_command};
+
+use crate::helpers::{chmod, command_output_formater};
 
 mod helpers;
 mod settings;
@@ -142,47 +143,6 @@ fn main() {
     }
 }
 
-fn command_output_formater(output: &Output) -> String {
-    let mut x = output
-        .stdout
-        .lines()
-        .filter_map(Result::ok)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<String>>()
-        .join("\n");
-    x.push_str(
-        output
-            .stderr
-            .lines()
-            .filter_map(Result::ok)
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<String>>()
-            .join("\n")
-            .as_str(),
-    );
-    x
-}
-
-fn run_install_command(command: &mut Command) {
-    match command.output() {
-        Ok(output) => {
-            if !output.status.success() {
-                println!("Fehler bei der Installation:");
-                println!("{}", command_output_formater(&output));
-                exit(1);
-            }
-        }
-        Err(err) => {
-            println!("Fehler bei der Installation: {}", err);
-            exit(1);
-        }
-    }
-}
-
 fn copy_file(from: &str, to: &str) {
     run_install_command(Command::new("cp").arg(from).arg(to));
-}
-
-pub fn chmod(filepath: &str, mode: &str) {
-    run_install_command(Command::new("chmod").arg(mode).arg(filepath))
 }

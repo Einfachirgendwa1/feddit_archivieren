@@ -1,8 +1,8 @@
 use std::{
-    fs::{File},
+    fs::File,
     io::{BufRead, BufReader},
     path::Path,
-    process::exit,
+    process::{exit, Command, Output},
 };
 
 use crate::settings::PID_FILE;
@@ -46,4 +46,45 @@ pub fn daemon_running() -> bool {
     } else {
         false
     }
+}
+
+pub fn chmod(filepath: &str, mode: &str) {
+    run_install_command(Command::new("chmod").arg(mode).arg(filepath))
+}
+
+pub fn run_install_command(command: &mut Command) {
+    match command.output() {
+        Ok(output) => {
+            if !output.status.success() {
+                println!("Fehler bei der Installation:");
+                println!("{}", command_output_formater(&output));
+                exit(1);
+            }
+        }
+        Err(err) => {
+            println!("Fehler bei der Installation: {}", err);
+            exit(1);
+        }
+    }
+}
+
+pub fn command_output_formater(output: &Output) -> String {
+    let mut x = output
+        .stdout
+        .lines()
+        .filter_map(Result::ok)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<String>>()
+        .join("\n");
+    x.push_str(
+        output
+            .stderr
+            .lines()
+            .filter_map(Result::ok)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<String>>()
+            .join("\n")
+            .as_str(),
+    );
+    x
 }

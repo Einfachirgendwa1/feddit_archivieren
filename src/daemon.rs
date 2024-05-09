@@ -7,7 +7,7 @@ mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{daemon_running, pid_file_exists},
+    helpers::{chmod, daemon_running, pid_file_exists},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
 
@@ -39,6 +39,8 @@ fn main() {
         .working_directory(".")
         .stdout(stdout)
         .stderr(stderr);
+
+    chmod(PID_FILE, "777");
 
     match daemonize.start() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
