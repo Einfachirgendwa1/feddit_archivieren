@@ -1,9 +1,11 @@
 use std::{
     env::args,
     fs::{create_dir, remove_dir_all, remove_file, File},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read, Write},
+    net::TcpStream,
     path::Path,
     process::{exit, Command},
+    time::Duration,
 };
 
 use helpers::{
@@ -207,6 +209,42 @@ fn main() {
                 }
             }
             println!("<Ende>");
+        }
+        "checkhealth" => {
+            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            println!("Versuche einen TcpStream zu establishen.");
+            let mut stream = match TcpStream::connect(get(settings::SOCKET_FILE)) {
+                Ok(stream) => {
+                    println!("Fertig.");
+                    dbg!(&stream);
+                    stream
+                }
+                Err(err) => {
+                    println!("Fehler: {}", err);
+                    exit(1);
+                }
+            };
+            println!("Versuche Daten in den Stream zu schreiben.");
+            if let Err(err) = stream.write_all("ping".as_bytes()) {
+                println!("Fehler: {}", err);
+                exit(1);
+            }
+            println!("Fertig.");
+            println!("Versuche Daten aus dem Stream zu empfangen.");
+            if let Err(err) = stream.set_read_timeout(Some(Duration::from_secs(5))) {
+                println!("Fehler beim Setzen des Timeouts: {}", err);
+                exit(1);
+            }
+            let mut message = String::new();
+            if let Err(err) = stream.read_to_string(&mut message) {
+                println!("Fehler beim Lesen aus dem Stream: {}", err);
+                exit(1);
+            }
+            feddit_archivieren_assert(
+                message == "pong",
+                format!("Nachricht pong erwartet, '{}' empfangen.", message).as_str(),
+            );
+            println!("Nachricht pong erfolgreich empfangen!");
         }
         _ => {
             println!("Unbekannter Befehl.");

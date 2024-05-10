@@ -81,10 +81,14 @@ fn main() {
     println!("Socketadresse in eine Datei geschrieben.");
 
     for stream in listener.incoming() {
+        println!("Test!");
         match stream {
             Err(e) => eprintln!("Fehlerhaften Stream empfangen: {}", e),
-            Ok(tcp_stream) => {
+            Ok(mut tcp_stream) => {
                 println!("Neue Verbindung: {}", tcp_stream.peer_addr().unwrap());
+                tcp_stream
+                    .write_all("pong".as_bytes())
+                    .expect("Fehler beim Schreiben in den TCP Stream."); // TODO:
             }
         }
     }
