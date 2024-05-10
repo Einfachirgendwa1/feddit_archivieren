@@ -83,6 +83,7 @@ fn main() {
             }
         }
         "update" => {
+            feddit_archivieren_assert(root(), "Du must root sein.");
             if !Path::new(settings::UDPATE_TMP_DIR).exists() {
                 let result = create_dir(settings::UDPATE_TMP_DIR);
                 if result.is_err() {
