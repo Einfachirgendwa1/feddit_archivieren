@@ -171,12 +171,39 @@ fn main() {
             }
         }
         "info" => {
-            if daemon_running() {
-                println!("Der Daemon läuft.");
-                println!("Port:\t{}", get(settings::SOCKET_FILE));
-                println!("PID:\t{}", get(settings::PID_FILE));
-            } else {
-                println!("Der Daemon läuft nicht.");
+            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            println!("Der Daemon läuft.");
+            println!("Port:\t{}", get(settings::SOCKET_FILE));
+            println!("PID:\t{}", get(settings::PID_FILE));
+        }
+        "logs_static" => {
+            println!("STDOUT:");
+            match File::open(settings::OUT_FILE) {
+                Ok(file) => {
+                    while let Some(line) = BufReader::new(&file).lines().next() {
+                        println!(
+                            "{}",
+                            line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
+                        );
+                    }
+                }
+                Err(err) => {
+                    println!("Fehler beim Lesen von {}: {}", settings::OUT_FILE, err);
+                }
+            }
+            println!("STDERR:");
+            match File::open(settings::ERR_FILE) {
+                Ok(file) => {
+                    while let Some(line) = BufReader::new(&file).lines().next() {
+                        println!(
+                            "{}",
+                            line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
+                        );
+                    }
+                }
+                Err(err) => {
+                    println!("Fehler beim Lesen von {}: {}", settings::ERR_FILE, err);
+                }
             }
         }
         _ => {
