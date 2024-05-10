@@ -1,6 +1,7 @@
 use std::{
     env::args,
-    fs::{create_dir, remove_dir_all, remove_file},
+    fs::{create_dir, remove_dir_all, remove_file, File},
+    io::{BufRead, BufReader},
     path::Path,
     process::{exit, Command},
 };
@@ -147,6 +148,15 @@ fn main() {
                 }
             }
         }
+        "info" => {
+            if daemon_running() {
+                println!("Der Daemon läuft.");
+                println!("Port:\t{}", get(settings::SOCKET_FILE));
+                println!("PID:\t{}", get(settings::PID_FILE));
+            } else {
+                println!("Der Daemon läuft nicht.");
+            }
+        }
         _ => {
             println!("Unbekannter Befehl.");
             exit(1);
@@ -177,5 +187,18 @@ fn remove_if_existing(filepath: &str) {
         if let Err(err) = remove_file(filepath) {
             println!("Fehler beim Löschen von {}: {}", filepath, err);
         }
+    }
+}
+
+fn get(filepath: &str) -> String {
+    match File::open(filepath) {
+        Ok(file) => {
+            if let Some(line) = BufReader::new(file).lines().next() {
+                line.unwrap_or_else(|err| format!("{}", err))
+            } else {
+                "Datei leer.".to_string()
+            }
+        }
+        Err(err) => format!("{}", err),
     }
 }
