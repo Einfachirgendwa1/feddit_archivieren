@@ -167,6 +167,7 @@ fn create_run_dir() {
                 settings::RUN_DIR,
                 result.unwrap_err()
             );
+            exit(1);
         }
     }
 }
