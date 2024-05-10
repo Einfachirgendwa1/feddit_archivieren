@@ -191,6 +191,7 @@ fn main() {
                     println!("Fehler beim Lesen von {}: {}", settings::OUT_FILE, err);
                 }
             }
+            println!("<Ende>");
             println!("STDERR:");
             match File::open(settings::ERR_FILE) {
                 Ok(file) => {
@@ -205,6 +206,7 @@ fn main() {
                     println!("Fehler beim Lesen von {}: {}", settings::ERR_FILE, err);
                 }
             }
+            println!("<Ende>");
         }
         _ => {
             println!("Unbekannter Befehl.");
