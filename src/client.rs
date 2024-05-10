@@ -120,6 +120,7 @@ fn main() {
                     );
                 }
             }
+            println!("Fertig.");
             match Command::new("make")
                 .current_dir(settings::UDPATE_TMP_DIR)
                 .arg("clean")
@@ -140,6 +141,8 @@ fn main() {
             }
             remove_dir_all(settings::UDPATE_TMP_DIR)
                 .expect(format!("Fehler beim Löschen von {}.", settings::UDPATE_TMP_DIR).as_str());
+
+            println!("Update erfolgreich abgeschlossen.");
         }
         "update_local" => {
             feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
@@ -158,6 +161,7 @@ fn main() {
                     exit(1);
                 }
             }
+            println!("Lokales Update erfolgreich abgeschlossen.");
         }
         "clean" => {
             if Path::new(settings::RUN_DIR).exists() {
