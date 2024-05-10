@@ -141,6 +141,24 @@ fn main() {
             remove_dir_all(settings::UDPATE_TMP_DIR)
                 .expect(format!("Fehler beim Löschen von {}.", settings::UDPATE_TMP_DIR).as_str());
         }
+        "update_local" => {
+            feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
+            feddit_archivieren_assert(root(), "Du must root sein.");
+
+            match Command::new("make").arg("clean").arg("install").output() {
+                Ok(output) => {
+                    if !output.status.success() {
+                        println!("Fehler bei der Installation.");
+                        println!("{}", command_output_formater(&output));
+                        exit(1);
+                    }
+                }
+                Err(err) => {
+                    println!("Fehler bei der Installation: {}", err);
+                    exit(1);
+                }
+            }
+        }
         "clean" => {
             if Path::new(settings::RUN_DIR).exists() {
                 if let Err(error) = remove_dir_all(settings::RUN_DIR) {
