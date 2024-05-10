@@ -1,6 +1,6 @@
 use std::{
     env::args,
-    fs::{create_dir, remove_dir_all},
+    fs::{create_dir, remove_dir_all, remove_file},
     path::Path,
     process::{exit, Command},
 };
@@ -28,11 +28,13 @@ fn main() {
                 exit(1);
             }
 
+            remove_if_existing(settings::DAEMON_PATH);
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
             if root() {
                 chmod(settings::DAEMON_PATH, "777");
             }
 
+            remove_if_existing(settings::CLIENT_PATH);
             copy_file("target/debug/client", settings::CLIENT_PATH);
             if root() {
                 chmod(settings::CLIENT_PATH, "777");
@@ -164,6 +166,14 @@ fn create_run_dir() {
                 settings::RUN_DIR,
                 result.unwrap_err()
             );
+        }
+    }
+}
+
+fn remove_if_existing(filepath: &str) {
+    if Path::new(filepath).exists() {
+        if let Err(err) = remove_file(filepath) {
+            println!("Fehler beim Löschen von {}: {}", filepath, err);
         }
     }
 }
