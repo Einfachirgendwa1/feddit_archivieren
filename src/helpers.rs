@@ -52,6 +52,10 @@ pub fn chmod(filepath: &str, mode: &str) {
     run_install_command(Command::new("chmod").arg(mode).arg(filepath))
 }
 
+pub fn root() -> bool {
+    users::get_current_uid() == 0
+}
+
 pub fn run_install_command(command: &mut Command) {
     match command.output() {
         Ok(output) => {

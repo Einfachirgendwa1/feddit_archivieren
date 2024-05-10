@@ -1,7 +1,13 @@
 extern crate daemonize;
 
 use daemonize::Daemonize;
-use std::{fs::File, io::Write, net::TcpListener, process::exit};
+use helpers::root;
+use std::{
+    fs::File,
+    io::{ErrorKind, Write},
+    net::TcpListener,
+    process::exit,
+};
 
 mod helpers;
 mod settings;
@@ -25,8 +31,20 @@ fn main() {
     }
 
     // Den Daemon erstellen und starten
-    let stdout = File::create(OUT_FILE).unwrap();
+    let stdout = match File::create(OUT_FILE) {
+        Ok(stdout) => stdout,
+        Err(err) => {
+            if err.kind() == ErrorKind::PermissionDenied {
+                println!("Die erste Installation muss als root ausgeführt werden.");
+            } else {
+                dbg!(err);
+            }
+            exit(1);
+        }
+    };
     let stderr = File::create(ERR_FILE).unwrap();
+
+    File::create(PID_FILE).unwrap();
 
     let daemonize = Daemonize::new()
         .pid_file(PID_FILE)
@@ -34,9 +52,9 @@ fn main() {
         .stdout(stdout)
         .stderr(stderr);
 
-    chmod(PID_FILE, "777");
-    chmod(OUT_FILE, "777");
-    chmod(ERR_FILE, "777");
+    chmod_to_non_root(OUT_FILE);
+    chmod_to_non_root(ERR_FILE);
+    chmod_to_non_root(PID_FILE);
 
     match daemonize.start() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
@@ -55,6 +73,7 @@ fn main() {
 
     // Unsere Socketadresse ins Socketfile schreiben
     let mut socketfile = File::create(SOCKET_FILE).unwrap();
+    chmod_to_non_root(SOCKET_FILE);
     socketfile
         .write_all(socket.to_string().as_bytes())
         .expect("Fehler beim Schreiben ins Socketfile.");
@@ -68,5 +87,11 @@ fn main() {
                 println!("Neue Verbindung: {}", tcp_stream.peer_addr().unwrap());
             }
         }
+    }
+}
+
+pub fn chmod_to_non_root(filepath: &str) {
+    if root() {
+        chmod(filepath, "666")
     }
 }

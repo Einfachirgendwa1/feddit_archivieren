@@ -5,7 +5,9 @@ use std::{
     process::{exit, Command},
 };
 
-use helpers::{daemon_running, feddit_archivieren_assert, read_pid_file, run_install_command};
+use helpers::{
+    daemon_running, feddit_archivieren_assert, read_pid_file, root, run_install_command,
+};
 
 use crate::helpers::{chmod, command_output_formater};
 
@@ -26,17 +28,6 @@ fn main() {
                 exit(1);
             }
 
-            if !Path::new(settings::RUN_DIR).exists() {
-                let result = create_dir(settings::RUN_DIR);
-                if result.is_err() {
-                    println!(
-                        "Fehler beim Erstellen von {}: {}",
-                        settings::RUN_DIR,
-                        result.unwrap_err()
-                    );
-                }
-            }
-
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
             chmod(settings::DAEMON_PATH, "777");
             copy_file("target/debug/client", settings::CLIENT_PATH);
@@ -45,6 +36,7 @@ fn main() {
             println!("Installation erfolgreich!");
         }
         "start" => {
+            create_run_dir();
             feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft bereits.");
             let mut launch_command = Command::new(settings::DAEMON_PATH);
             match launch_command.output() {
@@ -65,6 +57,10 @@ fn main() {
         }
         "kill" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            feddit_archivieren_assert(root(), "Du bist nicht root.");
+
+            create_run_dir();
+
             match Command::new("kill").arg(read_pid_file()).output() {
                 Ok(output) => {
                     if !output.status.success() {
@@ -136,6 +132,13 @@ fn main() {
                 }
             }
         }
+        "clean" => {
+            if Path::new(settings::RUN_DIR).exists() {
+                if let Err(error) = remove_dir_all(settings::RUN_DIR) {
+                    println!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
+                }
+            }
+        }
         _ => {
             println!("Unbekannter Befehl.");
             exit(1);
@@ -145,4 +148,17 @@ fn main() {
 
 fn copy_file(from: &str, to: &str) {
     run_install_command(Command::new("cp").arg(from).arg(to));
+}
+
+fn create_run_dir() {
+    if !Path::new(settings::RUN_DIR).exists() {
+        let result = create_dir(settings::RUN_DIR);
+        if result.is_err() {
+            println!(
+                "Fehler beim Erstellen von {}: {}",
+                settings::RUN_DIR,
+                result.unwrap_err()
+            );
+        }
+    }
 }
