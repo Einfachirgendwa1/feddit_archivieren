@@ -127,9 +127,9 @@ fn main() {
                 .output()
             {
                 Ok(output) => {
-                    println!("{}", command_output_formater(&output));
                     if !output.status.success() {
                         println!("Fehler bei der Installation.");
+                        println!("{}", command_output_formater(&output));
                         exit(1);
                     }
                 }
