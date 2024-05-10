@@ -12,12 +12,6 @@ use crate::{
 };
 
 fn main() {
-    // Überprüfen ob wir root sind
-    if users::get_current_uid() != 0 {
-        println!("Der Daemon muss als root gestartet werden!");
-        exit(1);
-    }
-
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -41,6 +35,8 @@ fn main() {
         .stderr(stderr);
 
     chmod(PID_FILE, "777");
+    chmod(OUT_FILE, "777");
+    chmod(ERR_FILE, "777");
 
     match daemonize.start() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
