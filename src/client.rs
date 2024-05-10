@@ -29,9 +29,14 @@ fn main() {
             }
 
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
-            chmod(settings::DAEMON_PATH, "777");
+            if root() {
+                chmod(settings::DAEMON_PATH, "777");
+            }
+
             copy_file("target/debug/client", settings::CLIENT_PATH);
-            chmod(settings::CLIENT_PATH, "777");
+            if root() {
+                chmod(settings::CLIENT_PATH, "777");
+            }
 
             println!("Installation erfolgreich!");
         }
