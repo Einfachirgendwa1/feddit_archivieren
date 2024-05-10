@@ -23,10 +23,7 @@ fn main() {
 
     match args.get(1).unwrap().as_str() {
         "install" => {
-            if daemon_running() {
-                println!("Es läuft aktuell schon ein Daemon!");
-                exit(1);
-            }
+            feddit_archivieren_assert(!daemon_running(), "Es läuft aktuell schon ein Daemon!");
 
             remove_if_existing(settings::DAEMON_PATH);
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
