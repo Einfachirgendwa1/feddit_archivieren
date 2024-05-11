@@ -64,7 +64,7 @@ fn main() {
         "kill" => {
             kill_daemon();
         }
-        "maybe_kill" => {
+        "kill_maybe" => {
             if daemon_running() {
                 kill_daemon();
             }
