@@ -7,9 +7,10 @@ use daemonize::Daemonize;
 use helpers::root;
 use std::{
     fs::File,
-    io::{ErrorKind, Write},
+    io::{stdout, ErrorKind, Write},
     net::{TcpListener, TcpStream},
     process::exit,
+    sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
 };
@@ -21,6 +22,16 @@ use crate::{
     helpers::{chmod, daemon_running, pid_file_exists, read_from_stream},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
+
+macro_rules! print_formatted_to_streams {
+    ($a:expr, $b:expr, $c:expr) => {
+        if !_print_formatted_to_streams($a, $b, $c) {
+            println!("Verbindung geschlossen.");
+            return;
+        }
+        sleep(Duration::from_millis(10));
+    };
+}
 
 fn main() {
     // Überprüfen ob bereits ein Daemon läuft
@@ -85,8 +96,21 @@ fn main() {
 
     println!("Socketadresse in eine Datei geschrieben.");
 
+    let streams = Arc::new(Mutex::new(Vec::new()));
+
+    let guard = streams.clone();
+    thread::spawn(move || loop {
+        print_formatted_to_streams!(&guard, &Severity::Info, "Hallo :)");
+        print_formatted_to_streams!(&guard, &Severity::Warning, "Das ist ein Warning :)");
+        print_formatted_to_streams!(&guard, &Severity::Error, "Das ist ein Error :)");
+        print_formatted_to_streams!(&guard, &Severity::Info, "Warte kurz...");
+        sleep(Duration::from_secs(2));
+        print_formatted_to_streams!(&guard, &Severity::Info, "Da bin ich wieder!");
+    });
+
     for stream in listener.incoming() {
-        thread::spawn(|| match stream {
+        let guard = streams.clone();
+        thread::spawn(move || match stream {
             Err(err) => {
                 eprintln!("Fehlerhafte Verbindung empfangen: {}", err);
                 return;
@@ -110,12 +134,7 @@ fn main() {
                         exit(0);
                     }
                     "listen" => {
-                        print_formatted(&mut stream, Severity::Info, "Hallo :)");
-                        print_formatted(&mut stream, Severity::Warning, "Das ist ein Warning :)");
-                        print_formatted(&mut stream, Severity::Error, "Das ist ein Error :)");
-                        print_formatted(&mut stream, Severity::Info, "Warte kurz...");
-                        sleep(Duration::from_secs(2));
-                        print_formatted(&mut stream, Severity::Info, "Da bin ich wieder!");
+                        guard.lock().unwrap().push(stream);
                     }
                     _ => {
                         println!("Unbekannter Befehl.");
@@ -135,6 +154,7 @@ fn chmod_to_non_root(filepath: &str) {
 
 fn shutdown_preperations() {}
 
+#[derive(Clone)]
 enum Severity {
     Info,
     Warning,
@@ -161,16 +181,30 @@ impl Severity {
     }
 }
 
-fn print_formatted(stream: &mut TcpStream, severity: Severity, message: &str) {
+fn print_formatted(stream: &mut TcpStream, severity: &Severity, message: &str) -> bool {
     let start = format!(
         "[{}]\t[{}] ",
         Local::now().format("%Y-%m-%d %H:%M:%S"),
         severity
     );
-    print!("{}{}", start, message);
+    println!("{}{}", start, message);
     stream
         .write_all(
             ColoredString::from(format!("{}{}", start, severity.colored(message))).as_bytes(),
         )
-        .unwrap();
+        .is_ok()
+}
+
+fn _print_formatted_to_streams(
+    streams: &Arc<Mutex<Vec<TcpStream>>>,
+    severity: &Severity,
+    message: &str,
+) -> bool {
+    for mut stream in streams.lock().unwrap().iter_mut() {
+        if !print_formatted(&mut stream, severity, message) {
+            return false;
+        }
+        stdout().flush().unwrap();
+    }
+    true
 }

@@ -117,9 +117,6 @@ pub fn read_from_stream(stream: &mut TcpStream) -> String {
 }
 
 pub fn to_rust_string(buf: &[u8; settings::TCP_BUFFER_SIZE]) -> String {
-    String::from_utf8(Vec::from(buf))
-        .expect("UTF-8 encoding error")
-        .chars()
-        .take_while(|character| *character != '\0')
-        .collect()
+    let string = String::from_utf8_lossy(buf);
+    string.trim_end_matches('\0').to_string()
 }

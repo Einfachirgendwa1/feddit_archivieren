@@ -1,7 +1,7 @@
 use std::{
     env::args,
     fs::{create_dir, remove_dir_all, remove_file, File},
-    io::{BufRead, BufReader, Write},
+    io::{stdout, BufRead, BufReader, Write},
     net::TcpStream,
     path::Path,
     process::{exit, Command},
@@ -253,6 +253,7 @@ fn main() {
                     exit(0);
                 }
                 println!("{}", response);
+                stdout().flush().unwrap();
             }
         }
         _ => {
