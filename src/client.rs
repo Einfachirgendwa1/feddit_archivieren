@@ -6,7 +6,7 @@ use std::{
     path::Path,
     process::{exit, Command},
     thread::sleep,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use helpers::{
@@ -168,38 +168,40 @@ fn main() {
             println!("PID:\t{}", get(settings::PID_FILE));
         }
         "logs_static" => {
-            println!("STDOUT:");
             match File::open(settings::OUT_FILE) {
                 Ok(file) => {
-                    let mut iterator = BufReader::new(&file).lines();
-                    while let Some(line) = iterator.next() {
-                        println!(
-                            "{}",
-                            line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
-                        );
+                    let mut iterator = BufReader::new(&file).lines().peekable();
+                    if iterator.peek().is_some() {
+                        println!("STDOUT:");
+                        while let Some(line) = iterator.next() {
+                            println!(
+                                "{}",
+                                line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
+                            );
+                        }
                     }
                 }
                 Err(err) => {
                     println!("Fehler beim Lesen von {}: {}", settings::OUT_FILE, err);
                 }
             }
-            println!("<Ende>");
-            println!("STDERR:");
             match File::open(settings::ERR_FILE) {
                 Ok(file) => {
-                    let mut iterator = BufReader::new(&file).lines();
-                    while let Some(line) = iterator.next() {
-                        println!(
-                            "{}",
-                            line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
-                        );
+                    let mut iterator = BufReader::new(&file).lines().peekable();
+                    if iterator.peek().is_some() {
+                        println!("STDERR:");
+                        while let Some(line) = iterator.next() {
+                            println!(
+                                "{}",
+                                line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
+                            );
+                        }
                     }
                 }
                 Err(err) => {
                     println!("Fehler beim Lesen von {}: {}", settings::ERR_FILE, err);
                 }
             }
-            println!("<Ende>");
         }
         "checkhealth" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
@@ -216,6 +218,7 @@ fn main() {
                 format!("Nachricht pong erwartet, '{}' empfangen.", message).as_str(),
             );
             println!("Nachricht pong erfolgreich empfangen!");
+            println!("Der Daemon scheint zu funktionieren.");
         }
         "stop" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
@@ -229,7 +232,12 @@ fn main() {
                 )
                 .as_str(),
             );
-            sleep(Duration::from_secs(1));
+            let start = Instant::now();
+            loop {
+                if !daemon_running() || start.elapsed() > Duration::from_secs(1) {
+                    break;
+                }
+            }
             feddit_archivieren_assert(
                 !daemon_running(),
                 "Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.",
