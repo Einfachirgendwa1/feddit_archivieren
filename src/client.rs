@@ -5,6 +5,8 @@ use std::{
     net::TcpStream,
     path::Path,
     process::{exit, Command},
+    thread::sleep,
+    time::Duration,
 };
 
 use helpers::{
@@ -203,12 +205,10 @@ fn main() {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
 
             println!("Versuche Daten in den Stream zu schreiben.");
-            let mut stream = TcpStream::connect(get(settings::SOCKET_FILE)).unwrap();
-            stream.write_all(b"ping").unwrap();
+            let mut stream = send_to_daemon("ping");
             println!("Fertig.");
 
             println!("Versuche Daten aus dem Stream zu empfangen.");
-
             let message = read_from_stream(&mut stream);
 
             feddit_archivieren_assert(
@@ -219,6 +219,22 @@ fn main() {
         }
         "stop" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            let mut stream = send_to_daemon("stop");
+            let response = read_from_stream(&mut stream);
+            feddit_archivieren_assert(
+                response == "ok",
+                format!(
+                    "Der Daemon hat eine unerwartete Antwort gesendet: {}",
+                    response
+                )
+                .as_str(),
+            );
+            sleep(Duration::from_secs(1));
+            feddit_archivieren_assert(
+                !daemon_running(),
+                "Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.",
+            );
+            println!("Der Daemon wurde erfolgreich beendet!");
         }
         _ => {
             println!("Unbekannter Befehl.");
@@ -272,4 +288,23 @@ fn kill_daemon() {
             println!("Fehler beim Killen des Daemons: {}", err);
         }
     }
+}
+
+fn send_to_daemon(message: &str) -> TcpStream {
+    let mut stream = match TcpStream::connect(get(settings::SOCKET_FILE)) {
+        Ok(stream) => stream,
+        Err(err) => {
+            println!(
+                "Fehler beim Verbinden mit {}: {}",
+                settings::SOCKET_FILE,
+                err
+            );
+            exit(1);
+        }
+    };
+    if let Err(err) = stream.write_all(message.as_bytes()) {
+        println!("Fehler beim Senden an den Daemon: {}", err);
+        exit(1);
+    }
+    stream
 }

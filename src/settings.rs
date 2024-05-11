@@ -16,3 +16,5 @@ pub const SOCKET_FILE: &'static str = "/run/feddit_archivieren/daemon.sck";
 pub const UDPATE_TMP_DIR: &'static str = "/tmp/feddit_archivieren";
 #[allow(dead_code)]
 pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddit_archivieren";
+#[allow(dead_code)]
+pub const TCP_BUFFER_SIZE: usize = 1024;

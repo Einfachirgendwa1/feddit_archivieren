@@ -93,17 +93,32 @@ fn main() {
 
                 println!("Nachricht: \"{}\"", message);
 
-                if message == "ping" {
-                    println!("Schreibe 'pong' in den stream");
-                    stream.write_all(b"pong").unwrap();
+                match message.as_str() {
+                    "ping" => {
+                        println!("Schreibe 'pong' in den stream");
+                        stream.write_all(b"pong").unwrap();
+                    }
+                    "stop" => {
+                        println!("Stoppe den Daemon.");
+                        shutdown_preperations();
+                        stream.write_all(b"ok").unwrap();
+                        println!("Exite.");
+                        exit(0);
+                    }
+                    _ => {
+                        println!("Unbekannter Befehl.");
+                        stream.write_all(b"unknown").unwrap();
+                    }
                 }
             }
         });
     }
 }
 
-pub fn chmod_to_non_root(filepath: &str) {
+fn chmod_to_non_root(filepath: &str) {
     if root() {
         chmod(filepath, "666")
     }
 }
+
+fn shutdown_preperations() {}

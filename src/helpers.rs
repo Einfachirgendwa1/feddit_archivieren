@@ -6,7 +6,7 @@ use std::{
     process::{exit, Command, Output},
 };
 
-use crate::settings::PID_FILE;
+use crate::settings::{self, PID_FILE};
 
 #[allow(dead_code)]
 pub fn feddit_archivieren_assert(condition: bool, message: &str) {
@@ -109,14 +109,14 @@ pub fn get(filepath: &str) -> String {
 }
 
 pub fn read_from_stream(stream: &mut TcpStream) -> String {
-    let mut buf = [0; 1024];
+    let mut buf = [0; settings::TCP_BUFFER_SIZE];
     if let Err(err) = stream.read(&mut buf) {
         println!("Fehler beim Lesen aus einem TcpStream: {}", err);
     }
     to_rust_string(&buf)
 }
 
-pub fn to_rust_string(buf: &[u8; 1024]) -> String {
+pub fn to_rust_string(buf: &[u8; settings::TCP_BUFFER_SIZE]) -> String {
     String::from_utf8(Vec::from(buf))
         .expect("UTF-8 encoding error")
         .chars()
