@@ -4,16 +4,17 @@ use daemonize::Daemonize;
 use helpers::root;
 use std::{
     fs::File,
-    io::{ErrorKind, Write},
+    io::{ErrorKind, Read, Write},
     net::TcpListener,
     process::exit,
+    thread,
 };
 
 mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, pid_file_exists},
+    helpers::{chmod, daemon_running, pid_file_exists, to_rust_string},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
 
@@ -81,16 +82,29 @@ fn main() {
     println!("Socketadresse in eine Datei geschrieben.");
 
     for stream in listener.incoming() {
-        println!("Test!");
-        match stream {
-            Err(e) => eprintln!("Fehlerhaften Stream empfangen: {}", e),
-            Ok(mut tcp_stream) => {
-                println!("Neue Verbindung: {}", tcp_stream.peer_addr().unwrap());
-                tcp_stream
-                    .write_all("pong".as_bytes())
-                    .expect("Fehler beim Schreiben in den TCP Stream."); // TODO:
+        thread::spawn(|| match stream {
+            Err(err) => {
+                eprintln!("Fehlerhafte Verbindung empfangen: {}", err);
+                return;
             }
-        }
+            Ok(mut stream) => {
+                println!("Empfange Verbindung mit {}...", stream.peer_addr().unwrap());
+                let mut buf = [0; 1024];
+                if let Err(err) = stream.read(&mut buf) {
+                    eprintln!("Fehler beim Lesen aus einer TCP Connection: {}", err);
+                    return;
+                }
+
+                let message = to_rust_string(&buf);
+
+                println!("Nachricht: \"{}\"", message);
+
+                if message == "ping" {
+                    println!("Schreibe 'pong' in den stream");
+                    stream.write_all(b"pong").unwrap();
+                }
+            }
+        });
     }
 }
 

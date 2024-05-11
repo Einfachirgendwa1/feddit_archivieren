@@ -5,14 +5,13 @@ use std::{
     net::TcpStream,
     path::Path,
     process::{exit, Command},
-    time::Duration,
 };
 
 use helpers::{
     daemon_running, feddit_archivieren_assert, read_pid_file, root, run_install_command,
 };
 
-use crate::helpers::{chmod, command_output_formater};
+use crate::helpers::{chmod, command_output_formater, get, to_rust_string};
 
 mod helpers;
 mod settings;
@@ -63,23 +62,11 @@ fn main() {
             }
         }
         "kill" => {
-            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
-            feddit_archivieren_assert(root(), "Du bist nicht root.");
-
-            create_run_dir();
-
-            match Command::new("kill").arg(read_pid_file()).output() {
-                Ok(output) => {
-                    if !output.status.success() {
-                        println!("Fehler beim Killen des Daemons:");
-                        println!("{}", command_output_formater(&output));
-                    } else {
-                        println!("Daemon erfolgreich gekillt.");
-                    }
-                }
-                Err(err) => {
-                    println!("Fehler beim Killen des Daemons: {}", err);
-                }
+            kill_daemon();
+        }
+        "maybe_kill" => {
+            if daemon_running() {
+                kill_daemon();
             }
         }
         "update" => {
@@ -182,7 +169,8 @@ fn main() {
             println!("STDOUT:");
             match File::open(settings::OUT_FILE) {
                 Ok(file) => {
-                    while let Some(line) = BufReader::new(&file).lines().next() {
+                    let mut iterator = BufReader::new(&file).lines();
+                    while let Some(line) = iterator.next() {
                         println!(
                             "{}",
                             line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
@@ -197,7 +185,8 @@ fn main() {
             println!("STDERR:");
             match File::open(settings::ERR_FILE) {
                 Ok(file) => {
-                    while let Some(line) = BufReader::new(&file).lines().next() {
+                    let mut iterator = BufReader::new(&file).lines();
+                    while let Some(line) = iterator.next() {
                         println!(
                             "{}",
                             line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
@@ -212,34 +201,18 @@ fn main() {
         }
         "checkhealth" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
-            println!("Versuche einen TcpStream zu establishen.");
-            let mut stream = match TcpStream::connect(get(settings::SOCKET_FILE)) {
-                Ok(stream) => {
-                    println!("Fertig.");
-                    dbg!(&stream);
-                    stream
-                }
-                Err(err) => {
-                    println!("Fehler: {}", err);
-                    exit(1);
-                }
-            };
+
             println!("Versuche Daten in den Stream zu schreiben.");
-            if let Err(err) = stream.write_all("ping".as_bytes()) {
-                println!("Fehler: {}", err);
-                exit(1);
-            }
+            let mut stream = TcpStream::connect(get(settings::SOCKET_FILE)).unwrap();
+            stream.write_all(b"ping").unwrap();
             println!("Fertig.");
+
             println!("Versuche Daten aus dem Stream zu empfangen.");
-            if let Err(err) = stream.set_read_timeout(Some(Duration::from_secs(5))) {
-                println!("Fehler beim Setzen des Timeouts: {}", err);
-                exit(1);
-            }
-            let mut message = String::new();
-            if let Err(err) = stream.read_to_string(&mut message) {
-                println!("Fehler beim Lesen aus dem Stream: {}", err);
-                exit(1);
-            }
+            let mut buf = [0; 1024];
+            stream.read(&mut buf).unwrap();
+
+            let message = to_rust_string(&buf);
+
             feddit_archivieren_assert(
                 message == "pong",
                 format!("Nachricht pong erwartet, '{}' empfangen.", message).as_str(),
@@ -279,15 +252,23 @@ fn remove_if_existing(filepath: &str) {
     }
 }
 
-fn get(filepath: &str) -> String {
-    match File::open(filepath) {
-        Ok(file) => {
-            if let Some(line) = BufReader::new(file).lines().next() {
-                line.unwrap_or_else(|err| format!("{}", err))
+fn kill_daemon() {
+    feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+    feddit_archivieren_assert(root(), "Du bist nicht root.");
+
+    create_run_dir();
+
+    match Command::new("kill").arg(read_pid_file()).output() {
+        Ok(output) => {
+            if !output.status.success() {
+                println!("Fehler beim Killen des Daemons:");
+                println!("{}", command_output_formater(&output));
             } else {
-                "Datei leer.".to_string()
+                println!("Daemon erfolgreich gekillt.");
             }
         }
-        Err(err) => format!("{}", err),
+        Err(err) => {
+            println!("Fehler beim Killen des Daemons: {}", err);
+        }
     }
 }

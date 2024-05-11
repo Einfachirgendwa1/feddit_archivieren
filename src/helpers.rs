@@ -92,3 +92,25 @@ pub fn command_output_formater(output: &Output) -> String {
     );
     x
 }
+
+#[allow(dead_code)]
+pub fn get(filepath: &str) -> String {
+    match File::open(filepath) {
+        Ok(file) => {
+            if let Some(line) = BufReader::new(file).lines().next() {
+                line.unwrap_or_else(|err| format!("{}", err))
+            } else {
+                "Datei leer.".to_string()
+            }
+        }
+        Err(err) => format!("{}", err),
+    }
+}
+
+pub fn to_rust_string(buf: &[u8; 1024]) -> String {
+    String::from_utf8(Vec::from(buf))
+        .expect("UTF-8 encoding error")
+        .chars()
+        .take_while(|character| *character != '\0')
+        .collect()
+}
