@@ -8,9 +8,10 @@ use helpers::root;
 use std::{
     fs::File,
     io::{ErrorKind, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     process::exit,
-    thread,
+    thread::{self, sleep},
+    time::Duration,
 };
 
 mod helpers;
@@ -109,27 +110,12 @@ fn main() {
                         exit(0);
                     }
                     "listen" => {
-                        stream
-                            .write_all(
-                                print_formatted(Severity::Info, "Hallo :)")
-                                    .to_string()
-                                    .as_bytes(),
-                            )
-                            .unwrap();
-                        stream
-                            .write_all(
-                                print_formatted(Severity::Warning, "Das ist ein Warning :)")
-                                    .to_string()
-                                    .as_bytes(),
-                            )
-                            .unwrap();
-                        stream
-                            .write_all(
-                                print_formatted(Severity::Error, "Das ist ein Error :)")
-                                    .to_string()
-                                    .as_bytes(),
-                            )
-                            .unwrap();
+                        print_formatted(&mut stream, Severity::Info, "Hallo :)");
+                        print_formatted(&mut stream, Severity::Warning, "Das ist ein Warning :)");
+                        print_formatted(&mut stream, Severity::Error, "Das ist ein Error :)");
+                        print_formatted(&mut stream, Severity::Info, "Warte kurz...");
+                        sleep(Duration::from_secs(2));
+                        print_formatted(&mut stream, Severity::Info, "Da bin ich wieder!");
                     }
                     _ => {
                         println!("Unbekannter Befehl.");
@@ -175,12 +161,16 @@ impl Severity {
     }
 }
 
-fn print_formatted(severity: Severity, message: &str) -> ColoredString {
+fn print_formatted(stream: &mut TcpStream, severity: Severity, message: &str) {
     let start = format!(
         "[{}]\t[{}] ",
         Local::now().format("%Y-%m-%d %H:%M:%S"),
         severity
     );
     print!("{}{}", start, message);
-    ColoredString::from(format!("{}{}", start, severity.colored(message)))
+    stream
+        .write_all(
+            ColoredString::from(format!("{}{}", start, severity.colored(message))).as_bytes(),
+        )
+        .unwrap();
 }
