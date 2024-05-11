@@ -1,5 +1,2 @@
 target/
 core
-daemon.pid
-daemon.out
-daemon.err
