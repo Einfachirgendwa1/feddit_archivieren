@@ -1,6 +1,7 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
+    net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
 };
@@ -105,6 +106,14 @@ pub fn get(filepath: &str) -> String {
         }
         Err(err) => format!("{}", err),
     }
+}
+
+pub fn read_from_stream(stream: &mut TcpStream) -> String {
+    let mut buf = [0; 1024];
+    if let Err(err) = stream.read(&mut buf) {
+        println!("Fehler beim Lesen aus einem TcpStream: {}", err);
+    }
+    to_rust_string(&buf)
 }
 
 pub fn to_rust_string(buf: &[u8; 1024]) -> String {

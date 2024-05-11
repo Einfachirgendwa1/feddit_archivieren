@@ -4,7 +4,7 @@ use daemonize::Daemonize;
 use helpers::root;
 use std::{
     fs::File,
-    io::{ErrorKind, Read, Write},
+    io::{ErrorKind, Write},
     net::TcpListener,
     process::exit,
     thread,
@@ -14,7 +14,7 @@ mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, pid_file_exists, to_rust_string},
+    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
 
@@ -89,13 +89,7 @@ fn main() {
             }
             Ok(mut stream) => {
                 println!("Empfange Verbindung mit {}...", stream.peer_addr().unwrap());
-                let mut buf = [0; 1024];
-                if let Err(err) = stream.read(&mut buf) {
-                    eprintln!("Fehler beim Lesen aus einer TCP Connection: {}", err);
-                    return;
-                }
-
-                let message = to_rust_string(&buf);
+                let message = read_from_stream(&mut stream);
 
                 println!("Nachricht: \"{}\"", message);
 

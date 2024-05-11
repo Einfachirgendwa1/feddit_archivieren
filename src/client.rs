@@ -1,7 +1,7 @@
 use std::{
     env::args,
     fs::{create_dir, remove_dir_all, remove_file, File},
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Write},
     net::TcpStream,
     path::Path,
     process::{exit, Command},
@@ -11,7 +11,7 @@ use helpers::{
     daemon_running, feddit_archivieren_assert, read_pid_file, root, run_install_command,
 };
 
-use crate::helpers::{chmod, command_output_formater, get, to_rust_string};
+use crate::helpers::{chmod, command_output_formater, get, read_from_stream};
 
 mod helpers;
 mod settings;
@@ -208,16 +208,17 @@ fn main() {
             println!("Fertig.");
 
             println!("Versuche Daten aus dem Stream zu empfangen.");
-            let mut buf = [0; 1024];
-            stream.read(&mut buf).unwrap();
 
-            let message = to_rust_string(&buf);
+            let message = read_from_stream(&mut stream);
 
             feddit_archivieren_assert(
                 message == "pong",
                 format!("Nachricht pong erwartet, '{}' empfangen.", message).as_str(),
             );
             println!("Nachricht pong erfolgreich empfangen!");
+        }
+        "stop" => {
+            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
         }
         _ => {
             println!("Unbekannter Befehl.");
