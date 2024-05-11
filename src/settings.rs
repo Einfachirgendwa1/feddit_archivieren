@@ -1,4 +1,7 @@
 #[allow(dead_code)]
+pub const FEDDIT_LINK: &'static str =
+    "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";
+#[allow(dead_code)]
 pub const DAEMON_PATH: &'static str = "/usr/bin/feddit_archive_daemon";
 #[allow(dead_code)]
 pub const CLIENT_PATH: &'static str = "/usr/bin/feddit_archivieren";
