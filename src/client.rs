@@ -243,6 +243,18 @@ fn main() {
             );
             println!("Der Daemon wurde erfolgreich beendet!");
         }
+        "listen" => {
+            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            let mut stream = send_to_daemon("listen");
+            loop {
+                let response = read_from_stream(&mut stream);
+                if response.is_empty() {
+                    println!("Der Daemon hat die Verbindung geschlossen.");
+                    exit(0);
+                }
+                println!("{}", response);
+            }
+        }
         _ => {
             println!("Unbekannter Befehl.");
             exit(1);

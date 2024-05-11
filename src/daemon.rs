@@ -1,5 +1,8 @@
 extern crate daemonize;
 
+use chrono::Local;
+use colored::{ColoredString, Colorize};
+use core::fmt;
 use daemonize::Daemonize;
 use helpers::root;
 use std::{
@@ -105,6 +108,29 @@ fn main() {
                         println!("Exite.");
                         exit(0);
                     }
+                    "listen" => {
+                        stream
+                            .write_all(
+                                print_formatted(Severity::Info, "Hallo :)")
+                                    .to_string()
+                                    .as_bytes(),
+                            )
+                            .unwrap();
+                        stream
+                            .write_all(
+                                print_formatted(Severity::Warning, "Das ist ein Warning :)")
+                                    .to_string()
+                                    .as_bytes(),
+                            )
+                            .unwrap();
+                        stream
+                            .write_all(
+                                print_formatted(Severity::Error, "Das ist ein Error :)")
+                                    .to_string()
+                                    .as_bytes(),
+                            )
+                            .unwrap();
+                    }
                     _ => {
                         println!("Unbekannter Befehl.");
                         stream.write_all(b"unknown").unwrap();
@@ -122,3 +148,39 @@ fn chmod_to_non_root(filepath: &str) {
 }
 
 fn shutdown_preperations() {}
+
+enum Severity {
+    Info,
+    Warning,
+    Error,
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match *self {
+            Severity::Info => "Info",
+            Severity::Warning => "Warning",
+            Severity::Error => "Error",
+        })
+    }
+}
+
+impl Severity {
+    fn colored(self: &Self, message: &str) -> ColoredString {
+        match *self {
+            Severity::Info => message.cyan(),
+            Severity::Warning => message.yellow(),
+            Severity::Error => message.red(),
+        }
+    }
+}
+
+fn print_formatted(severity: Severity, message: &str) -> ColoredString {
+    let start = format!(
+        "[{}]\t[{}] ",
+        Local::now().format("%Y-%m-%d %H:%M:%S"),
+        severity
+    );
+    print!("{}{}", start, message);
+    ColoredString::from(format!("{}{}", start, severity.colored(message)))
+}
