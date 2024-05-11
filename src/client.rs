@@ -5,7 +5,6 @@ use std::{
     net::TcpStream,
     path::Path,
     process::{exit, Command},
-    thread::sleep,
     time::{Duration, Instant},
 };
 
