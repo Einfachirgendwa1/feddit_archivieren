@@ -101,7 +101,7 @@ pub fn get(filepath: &str) -> String {
             if let Some(line) = BufReader::new(file).lines().next() {
                 line.unwrap_or_else(|err| format!("{}", err))
             } else {
-                "Datei leer.".to_string()
+                "Datei leer.".into()
             }
         }
         Err(err) => format!("{}", err),
@@ -118,5 +118,5 @@ pub fn read_from_stream(stream: &mut TcpStream) -> String {
 
 pub fn to_rust_string(buf: &[u8; settings::TCP_BUFFER_SIZE]) -> String {
     let string = String::from_utf8_lossy(buf);
-    string.trim_end_matches('\0').to_string()
+    string.trim_end_matches('\0').into()
 }

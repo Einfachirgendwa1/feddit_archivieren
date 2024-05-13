@@ -175,7 +175,7 @@ fn main() {
                         while let Some(line) = iterator.next() {
                             println!(
                                 "{}",
-                                line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
+                                line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".into())
                             );
                         }
                     }
@@ -192,7 +192,7 @@ fn main() {
                         while let Some(line) = iterator.next() {
                             println!(
                                 "{}",
-                                line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".to_string())
+                                line.unwrap_or("<FEHLER BEIM LESEN DIESER ZEILE>".into())
                             );
                         }
                     }

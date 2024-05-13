@@ -5,16 +5,17 @@ use colored::{ColoredString, Colorize};
 use core::fmt;
 use daemonize::Daemonize;
 use helpers::root;
+use reqwest::{ClientBuilder, Method, Request, Url};
 use std::{
     fs::File,
     io::{stdout, ErrorKind, Write},
     net::{TcpListener, TcpStream},
     process::exit,
+    str::FromStr,
     sync::{Arc, Mutex},
     thread::{self, sleep},
-    time::Duration,
+    time::{Duration, Instant},
 };
-
 mod helpers;
 mod settings;
 
@@ -22,6 +23,8 @@ use crate::{
     helpers::{chmod, daemon_running, pid_file_exists, read_from_stream},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
+
+type Data = Arc<Mutex<(String, Vec<TcpStream>)>>;
 
 macro_rules! print_formatted_to_streams {
     ($a:expr, $b:expr, $c:expr) => {
@@ -33,7 +36,8 @@ macro_rules! print_formatted_to_streams {
     };
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -96,18 +100,21 @@ fn main() {
 
     println!("Socketadresse in eine Datei geschrieben.");
 
+    // Archive und Feddit spawnen
     let streams = Arc::new(Mutex::new(Vec::new()));
-
     let guard = streams.clone();
-    thread::spawn(move || loop {
-        print_formatted_to_streams!(&guard, &Severity::Info, "Hallo :)");
-        print_formatted_to_streams!(&guard, &Severity::Warning, "Das ist ein Warning :)");
-        print_formatted_to_streams!(&guard, &Severity::Error, "Das ist ein Error :)");
-        print_formatted_to_streams!(&guard, &Severity::Info, "Warte kurz...");
-        sleep(Duration::from_secs(2));
-        print_formatted_to_streams!(&guard, &Severity::Info, "Da bin ich wieder!");
-    });
+    let data: Data = Arc::new(Mutex::new((
+        String::from(settings::FEDDIT_LINK),
+        Vec::new(),
+    )));
+    let data_guard = data.clone();
+    let streams_guard = guard.clone();
+    feddit(streams_guard, data_guard).await;
+    let data_guard = data.clone();
+    let streams_guard = guard.clone();
+    archive(streams_guard, data_guard).await;
 
+    // Auf reinkommende Befehl hören
     for stream in listener.incoming() {
         let guard = streams.clone();
         thread::spawn(move || match stream {
@@ -154,7 +161,6 @@ fn chmod_to_non_root(filepath: &str) {
 
 fn shutdown_preperations() {}
 
-#[derive(Clone)]
 enum Severity {
     Info,
     Warning,
@@ -197,14 +203,86 @@ fn print_formatted(stream: &mut TcpStream, severity: &Severity, message: &str) -
 
 fn _print_formatted_to_streams(
     streams: &Arc<Mutex<Vec<TcpStream>>>,
-    severity: &Severity,
+    severity: Severity,
     message: &str,
 ) -> bool {
     for mut stream in streams.lock().unwrap().iter_mut() {
-        if !print_formatted(&mut stream, severity, message) {
+        if !print_formatted(&mut stream, &severity, message) {
             return false;
         }
         stdout().flush().unwrap();
     }
     true
 }
+
+async fn feddit(streams: Arc<Mutex<Vec<TcpStream>>>, data: Data) {
+    print_formatted_to_streams!(&streams, Severity::Error, "Hallo von Feddit!".into());
+    let client_builder = ClientBuilder::new();
+    let client = ClientBuilder::timeout(client_builder, Duration::from_secs(10))
+        .build()
+        .unwrap();
+    let lock = data.lock().unwrap();
+    let url = lock.0.clone();
+    drop(lock);
+    let request = Request::new(Method::GET, Url::from_str(url.as_str()).unwrap());
+    let start = Instant::now();
+    let content: String;
+    loop {
+        match client.execute(request.try_clone().unwrap()).await {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success() {
+                    match response.text().await {
+                        Ok(text) => {
+                            content = text;
+                            break;
+                        }
+                        Err(err) => {
+                            print_formatted_to_streams!(
+                                &streams,
+                                Severity::Error,
+                                format!("Fehler beim Encoden des HTML Bodys: {}", err).as_str()
+                            );
+                            shutdown_preperations();
+                            exit(1);
+                        }
+                    }
+                } else {
+                    println!("{} antwortet mit statuscode {}.", request.url(), status);
+                    if start.elapsed() > Duration::from_secs(1800) {
+                        print_formatted_to_streams!(
+                        &streams,
+                        Severity::Error,
+                        format!("Innerhalb von 30 Minuten hat sich das Problem nicht von selbst gelöst, exite mit Code 1.").as_str()
+                    );
+                        shutdown_preperations();
+                        exit(1);
+                    }
+                }
+            }
+            Err(err) => {
+                print_formatted_to_streams!(
+                    &streams,
+                    Severity::Warning,
+                    format!("Fehler beim Versuch eine Request zu senden: {}", err).as_str()
+                );
+                if start.elapsed() > Duration::from_secs(600) {
+                    print_formatted_to_streams!(
+                        &streams,
+                        Severity::Error,
+                        format!("Innerhalb von 10 Minuten hat sich das Problem nicht von selbst gelöst, exite mit Code 1. ({})", err).as_str()
+                    );
+                    shutdown_preperations();
+                    exit(1);
+                }
+            }
+        }
+    }
+    print_formatted_to_streams!(
+        &streams,
+        Severity::Error,
+        format!("Erfolgreich folgenden Body empfangen: {}", content).as_str()
+    );
+}
+
+async fn archive(streams: Arc<Mutex<Vec<TcpStream>>>, data: Data) {}
