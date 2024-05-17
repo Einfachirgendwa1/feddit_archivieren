@@ -72,8 +72,6 @@ async fn main() {
         .stdout(stdout)
         .stderr(stderr);
 
-    println!("Mein Penis ist hart!");
-
     chmod_to_non_root(OUT_FILE);
     chmod_to_non_root(ERR_FILE);
     chmod_to_non_root(PID_FILE);
@@ -82,6 +80,8 @@ async fn main() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
         Err(e) => eprintln!("Error, {}", e),
     }
+
+    println!("Mein Penis ist hart!");
 
     // An einen Socket binden
     let listener =
