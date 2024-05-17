@@ -38,6 +38,7 @@ macro_rules! print_formatted_to_streams {
 
 #[tokio::main]
 async fn main() {
+    println!("Mein Penis ist hart!");
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
