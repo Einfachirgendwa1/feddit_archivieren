@@ -38,7 +38,6 @@ macro_rules! print_formatted_to_streams {
 
 #[tokio::main]
 async fn main() {
-    println!("Mein Penis ist hart!");
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -72,6 +71,8 @@ async fn main() {
         .working_directory(".")
         .stdout(stdout)
         .stderr(stderr);
+
+    println!("Mein Penis ist hart!");
 
     chmod_to_non_root(OUT_FILE);
     chmod_to_non_root(ERR_FILE);
