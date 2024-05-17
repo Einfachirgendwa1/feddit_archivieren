@@ -120,6 +120,7 @@ fn main() {
                 .output()
             {
                 Ok(output) => {
+                    dbg!(&output);
                     println!("{:?}", output.stdout);
                     println!("{:?}", output.stderr);
                     if !output.status.success() {
