@@ -137,7 +137,10 @@ fn main() {
             println!("Update erfolgreich abgeschlossen.");
         }
         "update_local" => {
-            feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
+            if daemon_running() {
+                kill_daemon();
+            }
+
             feddit_archivieren_assert(root(), "Du must root sein.");
 
             match Command::new("make").arg("clean").arg("install").output() {
