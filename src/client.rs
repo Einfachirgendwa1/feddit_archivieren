@@ -68,6 +68,8 @@ fn main() {
         "kill_maybe" => {
             if daemon_running() {
                 kill_daemon();
+            } else {
+                println!("Der Bruder ist schon tot :( (Agavendicksaft Moment)")
             }
         }
         "update" => {
