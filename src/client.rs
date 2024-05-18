@@ -115,8 +115,7 @@ fn main() {
             println!("Fertig.");
             match Command::new("make")
                 .current_dir(settings::UDPATE_TMP_DIR)
-                .arg("clean")
-                .arg("install")
+                .args(["clean", "install"])
                 .output()
             {
                 Ok(output) => {
