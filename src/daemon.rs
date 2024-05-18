@@ -1,20 +1,13 @@
 extern crate daemonize;
 
-use chrono::Local;
-use colored::{ColoredString, Colorize};
-use core::fmt;
 use daemonize::Daemonize;
 use helpers::root;
-use reqwest::{ClientBuilder, Method, Request, Url};
 use std::{
     fs::File,
-    io::{stdout, ErrorKind, Write},
-    net::{TcpListener, TcpStream},
+    io::{ErrorKind, Write},
+    net::TcpListener,
     process::exit,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    thread::{self, sleep},
-    time::{Duration, Instant},
+    thread::{self},
 };
 mod helpers;
 mod settings;
@@ -23,18 +16,6 @@ use crate::{
     helpers::{chmod, daemon_running, pid_file_exists, read_from_stream},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
-
-type Data = Arc<Mutex<(String, Vec<TcpStream>)>>;
-
-macro_rules! print_formatted_to_streams {
-    ($a:expr, $b:expr, $c:expr) => {
-        if !_print_formatted_to_streams($a, $b, $c) {
-            println!("Verbindung geschlossen.");
-            return;
-        }
-        sleep(Duration::from_millis(10));
-    };
-}
 
 #[tokio::main]
 async fn main() {
@@ -101,23 +82,10 @@ async fn main() {
 
     println!("Socketadresse in eine Datei geschrieben.");
 
-    // Archive und Feddit spawnen
-    let streams = Arc::new(Mutex::new(Vec::new()));
-    let guard = streams.clone();
-    let data: Data = Arc::new(Mutex::new((
-        String::from(settings::FEDDIT_LINK),
-        Vec::new(),
-    )));
-    let data_guard = data.clone();
-    let streams_guard = guard.clone();
-    feddit(streams_guard, data_guard).await;
-    let data_guard = data.clone();
-    let streams_guard = guard.clone();
-    archive(streams_guard, data_guard).await;
+    // TODO: Archive und Feddit spawnen
 
     // Auf reinkommende Befehl hören
     for stream in listener.incoming() {
-        let guard = streams.clone();
         thread::spawn(move || match stream {
             Err(err) => {
                 eprintln!("Fehlerhafte Verbindung empfangen: {}", err);
@@ -142,7 +110,7 @@ async fn main() {
                         exit(0);
                     }
                     "listen" => {
-                        guard.lock().unwrap().push(stream);
+                        // TODO: implementieren
                     }
                     _ => {
                         println!("Unbekannter Befehl.");
@@ -161,129 +129,3 @@ fn chmod_to_non_root(filepath: &str) {
 }
 
 fn shutdown_preperations() {}
-
-enum Severity {
-    Info,
-    Warning,
-    Error,
-}
-
-impl fmt::Display for Severity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match *self {
-            Severity::Info => "Info",
-            Severity::Warning => "Warning",
-            Severity::Error => "Error",
-        })
-    }
-}
-
-impl Severity {
-    fn colored(self: &Self, message: &str) -> ColoredString {
-        match *self {
-            Severity::Info => message.cyan(),
-            Severity::Warning => message.yellow(),
-            Severity::Error => message.red(),
-        }
-    }
-}
-
-fn print_formatted(stream: &mut TcpStream, severity: &Severity, message: &str) -> bool {
-    let start = format!(
-        "[{}]\t[{}] ",
-        Local::now().format("%Y-%m-%d %H:%M:%S"),
-        severity
-    );
-    println!("{}{}", start, message);
-    stream
-        .write_all(
-            ColoredString::from(format!("{}{}", start, severity.colored(message))).as_bytes(),
-        )
-        .is_ok()
-}
-
-fn _print_formatted_to_streams(
-    streams: &Arc<Mutex<Vec<TcpStream>>>,
-    severity: Severity,
-    message: &str,
-) -> bool {
-    for mut stream in streams.lock().unwrap().iter_mut() {
-        if !print_formatted(&mut stream, &severity, message) {
-            return false;
-        }
-        stdout().flush().unwrap();
-    }
-    true
-}
-
-async fn feddit(streams: Arc<Mutex<Vec<TcpStream>>>, data: Data) {
-    print_formatted_to_streams!(&streams, Severity::Error, "Hallo von Feddit!".into());
-    let client_builder = ClientBuilder::new();
-    let client = ClientBuilder::timeout(client_builder, Duration::from_secs(10))
-        .build()
-        .unwrap();
-    let lock = data.lock().unwrap();
-    let url = lock.0.clone();
-    drop(lock);
-    let request = Request::new(Method::GET, Url::from_str(url.as_str()).unwrap());
-    let start = Instant::now();
-    let content: String;
-    loop {
-        match client.execute(request.try_clone().unwrap()).await {
-            Ok(response) => {
-                let status = response.status();
-                if status.is_success() {
-                    match response.text().await {
-                        Ok(text) => {
-                            content = text;
-                            break;
-                        }
-                        Err(err) => {
-                            print_formatted_to_streams!(
-                                &streams,
-                                Severity::Error,
-                                format!("Fehler beim Encoden des HTML Bodys: {}", err).as_str()
-                            );
-                            shutdown_preperations();
-                            exit(1);
-                        }
-                    }
-                } else {
-                    println!("{} antwortet mit statuscode {}.", request.url(), status);
-                    if start.elapsed() > Duration::from_secs(1800) {
-                        print_formatted_to_streams!(
-                        &streams,
-                        Severity::Error,
-                        format!("Innerhalb von 30 Minuten hat sich das Problem nicht von selbst gelöst, exite mit Code 1.").as_str()
-                    );
-                        shutdown_preperations();
-                        exit(1);
-                    }
-                }
-            }
-            Err(err) => {
-                print_formatted_to_streams!(
-                    &streams,
-                    Severity::Warning,
-                    format!("Fehler beim Versuch eine Request zu senden: {}", err).as_str()
-                );
-                if start.elapsed() > Duration::from_secs(600) {
-                    print_formatted_to_streams!(
-                        &streams,
-                        Severity::Error,
-                        format!("Innerhalb von 10 Minuten hat sich das Problem nicht von selbst gelöst, exite mit Code 1. ({})", err).as_str()
-                    );
-                    shutdown_preperations();
-                    exit(1);
-                }
-            }
-        }
-    }
-    print_formatted_to_streams!(
-        &streams,
-        Severity::Error,
-        format!("Erfolgreich folgenden Body empfangen: {}", content).as_str()
-    );
-}
-
-async fn archive(streams: Arc<Mutex<Vec<TcpStream>>>, data: Data) {}
