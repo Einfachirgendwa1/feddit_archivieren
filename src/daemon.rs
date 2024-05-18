@@ -109,6 +109,9 @@ async fn main() {
                     }
                     "listen" => {
                         // TODO: implementieren
+                        stream
+                            .write_all(b"Noch nicht implementiert, sorry :(")
+                            .unwrap();
                     }
                     _ => {
                         println!("Unbekannter Befehl.");
