@@ -1,6 +1,6 @@
 use clap::{ArgAction, Parser, Subcommand};
 use std::{
-    fs::{create_dir, read_to_string, remove_dir_all, remove_file, File},
+    fs::{create_dir, read_dir, read_to_string, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
     net::TcpStream,
     path::Path,
@@ -375,7 +375,9 @@ fn send_to_daemon(message: &str) -> TcpStream {
 
 /// Updatet das Programm
 fn update() -> Result<(), String> {
-    if !Path::new(settings::UDPATE_DIR).exists() {
+    if !Path::new(settings::UDPATE_DIR).exists()
+        || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
+    {
         // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
         match Command::new("git")
             .arg("clone")
