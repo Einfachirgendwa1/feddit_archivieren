@@ -3,9 +3,11 @@ use helpers::root;
 use std::{
     fs::File,
     io::{ErrorKind, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     process::exit,
-    thread::{self},
+    sync::{Arc, Mutex},
+    thread::{self, sleep},
+    time::Duration,
 };
 mod helpers;
 mod settings;
@@ -56,6 +58,8 @@ async fn main() {
     chmod_to_non_root(ERR_FILE);
     chmod_to_non_root(PID_FILE);
 
+    let recievers: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
+
     match daemonize.start() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
         Err(e) => eprintln!("Error, {}", e),
@@ -84,25 +88,35 @@ async fn main() {
 
     // Auf reinkommende Befehl hören
     for stream in listener.incoming() {
+        let guard = recievers.clone();
         thread::spawn(move || match stream {
             Err(err) => {
-                eprintln!("Fehlerhafte Verbindung empfangen: {}", err);
+                eprint(
+                    &format!("Fehlerhafte Verbindung empfangen: {}", err),
+                    &*guard.lock().unwrap(),
+                );
                 return;
             }
             Ok(mut stream) => {
-                println!("Empfange Verbindung mit {}...", stream.peer_addr().unwrap());
+                print(
+                    &format!("Empfange Verbindung mit {}...", stream.peer_addr().unwrap()),
+                    &*guard.lock().unwrap(),
+                );
                 let message = read_from_stream(&mut stream);
 
-                println!("Nachricht: \"{}\"", message);
+                print(
+                    &format!("Nachricht: \"{}\"", message),
+                    &*guard.lock().unwrap(),
+                );
 
                 match message.as_str() {
                     "ping" => {
-                        println!("Schreibe 'pong' in den stream");
+                        print("Schreibe 'pong' in den stream", &*guard.lock().unwrap());
                         stream.write_all(b"pong").unwrap();
                     }
                     "stop" => {
-                        println!("Stoppe den Daemon.");
-                        shutdown_preperations();
+                        print("Stoppe den Daemon.", &*guard.lock().unwrap());
+                        shutdown_preperations(&*guard.lock().unwrap());
                         stream.write_all(b"ok").unwrap();
                         println!("Exite.");
                         exit(0);
@@ -110,8 +124,10 @@ async fn main() {
                     "listen" => {
                         // TODO: implementieren
                         stream
-                            .write_all(b"Noch nicht implementiert, sorry :(")
+                            .write_all(b"Achtung: Aktuell noch extrem unstable!")
                             .unwrap();
+
+                        guard.lock().unwrap().push(stream);
                     }
                     _ => {
                         println!("Unbekannter Befehl.");
@@ -123,6 +139,21 @@ async fn main() {
     }
 }
 
+fn print(message: &str, streams: &Vec<TcpStream>) {
+    println!("{}", message);
+    for mut stream in streams {
+        stream.write(message.as_bytes()).unwrap();
+    }
+    sleep(Duration::from_millis(1));
+}
+
+fn eprint(message: &str, streams: &Vec<TcpStream>) {
+    eprintln!("{}", message);
+    for mut stream in streams {
+        stream.write(message.as_bytes()).unwrap();
+    }
+}
+
 /// Ändert die Berechtigungen einer Datei zu read-write für alle Nutzer
 fn chmod_to_non_root(filepath: &str) {
     if root() {
@@ -131,4 +162,9 @@ fn chmod_to_non_root(filepath: &str) {
 }
 
 /// Wird ausgeführt nachdem stop empfangen wurde
-fn shutdown_preperations() {}
+fn shutdown_preperations(streams: &Vec<TcpStream>) {
+    for mut stream in streams {
+        stream.write(b"Tschau :)").unwrap();
+        stream.shutdown(std::net::Shutdown::Both).unwrap();
+    }
+}
