@@ -67,10 +67,23 @@ fn main() {
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
             copy_file("target/debug/client", settings::CLIENT_PATH);
 
+            // Das Update dir erstellen
+            if !Path::new(settings::UDPATE_DIR).exists() {
+                if let Err(err) = create_dir(settings::UDPATE_DIR) {
+                    eprintln!(
+                        "Fehler beim Erstellen von {}: {}",
+                        settings::UDPATE_DIR,
+                        err
+                    );
+                }
+            }
+
             // Jedem Benutzer read-write-execute Rechte für die Dateien geben, wenn möglich
             if root() {
                 chmod(settings::DAEMON_PATH, "777");
                 chmod(settings::CLIENT_PATH, "777");
+
+                chmod(settings::UDPATE_DIR, "777");
             }
 
             println!("Installation erfolgreich!");
