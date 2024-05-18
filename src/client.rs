@@ -82,8 +82,8 @@ fn main() {
                 exit(1);
             } else {
                 println!("Update erfolgreich abgeschlossen.");
-                exit(0);
             }
+            exit(0);
         }
         "update_local" => {
             if daemon_running() {
