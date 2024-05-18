@@ -121,8 +121,6 @@ fn main() {
                 eprintln!("Fehler beim Updaten: ");
                 eprintln!("{}", message);
                 exit(1);
-            } else {
-                println!("Update erfolgreich abgeschlossen.");
             }
 
             exit(0);
@@ -470,6 +468,7 @@ fn update() -> Result<(), String> {
         "Die neuste Version ({}) ist jetzt installiert.",
         get_update_version()
     );
+    println!("Update erfolgreich abgeschlossen.");
     Ok(())
 }
 
