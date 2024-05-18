@@ -7,8 +7,7 @@ pub const ERR_FILE: &'static str = "/run/feddit_archivieren/daemon.err";
 pub const OUT_FILE: &'static str = "/run/feddit_archivieren/daemon.out";
 pub const SOCKET_FILE: &'static str = "/run/feddit_archivieren/daemon.sck";
 pub const UDPATE_DIR: &'static str = "/tmp/feddit_archivieren";
-pub const GITHUB_LINK: &'static str =
-    "https://github.com/Einfachirgendwa1/feddit_archivieren -b version_parsing";
+pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddit_archivieren";
 pub const TCP_BUFFER_SIZE: usize = 1024;
 pub const FEDDIT_LINK: &'static str =
     "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";
