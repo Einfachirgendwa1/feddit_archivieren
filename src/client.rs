@@ -421,7 +421,7 @@ fn update() -> Result<(), String> {
     println!("Fertig!");
 
     if get_current_version() == get_update_version() {
-        println!("Bereits die neuste Version.");
+        println!("Bereits die neuste Version ({}).", get_current_version());
         return Ok(());
     }
 
@@ -452,7 +452,10 @@ fn update() -> Result<(), String> {
     }
 
     println!("Fertig!");
-    println!("Die neuste Version ist jetzt installiert.");
+    println!(
+        "Die neuste Version ({}) ist jetzt installiert.",
+        get_update_version()
+    );
     Ok(())
 }
 
