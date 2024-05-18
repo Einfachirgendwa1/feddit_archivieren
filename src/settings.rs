@@ -16,7 +16,7 @@ pub const OUT_FILE: &'static str = "/run/feddit_archivieren/daemon.out";
 #[allow(dead_code)]
 pub const SOCKET_FILE: &'static str = "/run/feddit_archivieren/daemon.sck";
 #[allow(dead_code)]
-pub const UDPATE_TMP_DIR: &'static str = "/tmp/feddit_archivieren";
+pub const UDPATE_DIR: &'static str = "/tmp/feddit_archivieren";
 #[allow(dead_code)]
 pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddit_archivieren";
 #[allow(dead_code)]

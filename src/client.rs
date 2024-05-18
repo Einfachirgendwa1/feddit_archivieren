@@ -76,64 +76,14 @@ fn main() {
             feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
             feddit_archivieren_assert(root(), "Du must root sein.");
 
-            if !Path::new(settings::UDPATE_TMP_DIR).exists() {
-                let result = create_dir(settings::UDPATE_TMP_DIR);
-                if result.is_err() {
-                    println!(
-                        "Fehler beim Erstellen von {}: {}",
-                        settings::UDPATE_TMP_DIR,
-                        result.unwrap_err()
-                    );
-                }
+            if let Err(message) = update() {
+                println!("Fehler beim Updaten: ");
+                println!("{}", message);
+                exit(1);
             } else {
-                remove_dir_all(settings::UDPATE_TMP_DIR).expect(
-                    format!("Fehler beim Löschen von {}.", settings::UDPATE_TMP_DIR).as_str(),
-                );
+                println!("Update erfolgreich abgeschlossen.");
+                exit(0);
             }
-            match Command::new("git")
-                .arg("clone")
-                .arg(settings::GITHUB_LINK)
-                .arg(settings::UDPATE_TMP_DIR)
-                .output()
-            {
-                Ok(output) => {
-                    println!("{}", command_output_formater(&output));
-                    if !output.status.success() {
-                        println!("Fehler beim Klonen.");
-                        exit(1);
-                    }
-                }
-                Err(err) => {
-                    println!(
-                        "Fehler beim Klonen von {} nach {}: {}",
-                        settings::GITHUB_LINK,
-                        settings::UDPATE_TMP_DIR,
-                        err
-                    );
-                }
-            }
-            println!("Fertig.");
-            match Command::new("make")
-                .current_dir(settings::UDPATE_TMP_DIR)
-                .args(["clean", "install"])
-                .output()
-            {
-                Ok(output) => {
-                    if !output.status.success() {
-                        println!("Fehler bei der Installation.");
-                        println!("{}", command_output_formater(&output));
-                        exit(1);
-                    }
-                }
-                Err(err) => {
-                    println!("Fehler bei der Installation: {}", err);
-                    exit(1);
-                }
-            }
-            remove_dir_all(settings::UDPATE_TMP_DIR)
-                .expect(format!("Fehler beim Löschen von {}.", settings::UDPATE_TMP_DIR).as_str());
-
-            println!("Update erfolgreich abgeschlossen.");
         }
         "update_local" => {
             if daemon_running() {
@@ -161,6 +111,15 @@ fn main() {
             if Path::new(settings::RUN_DIR).exists() {
                 if let Err(error) = remove_dir_all(settings::RUN_DIR) {
                     println!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
+                }
+            }
+            if Path::new(settings::UDPATE_DIR).exists() {
+                if let Err(error) = remove_dir_all(settings::UDPATE_DIR) {
+                    println!(
+                        "Fehler beim Löschen von {}: {}",
+                        settings::UDPATE_DIR,
+                        error
+                    );
                 }
             }
         }
@@ -331,4 +290,78 @@ fn send_to_daemon(message: &str) -> TcpStream {
         exit(1);
     }
     stream
+}
+
+fn update() -> Result<(), String> {
+    if !Path::new(settings::UDPATE_DIR).exists() {
+        let result = create_dir(settings::UDPATE_DIR);
+        if result.is_err() {
+            println!(
+                "Fehler beim Erstellen von {}: {}",
+                settings::UDPATE_DIR,
+                result.unwrap_err()
+            );
+        }
+        match Command::new("git")
+            .arg("clone")
+            .arg(settings::GITHUB_LINK)
+            .arg(settings::UDPATE_DIR)
+            .output()
+        {
+            Ok(output) => {
+                println!("{}", command_output_formater(&output));
+                if !output.status.success() {
+                    println!("Fehler beim Klonen.");
+                    exit(1);
+                }
+            }
+            Err(err) => {
+                println!(
+                    "Fehler beim Klonen von {} nach {}: {}",
+                    settings::GITHUB_LINK,
+                    settings::UDPATE_DIR,
+                    err
+                );
+            }
+        }
+    } else {
+        match Command::new("git")
+            .current_dir(settings::UDPATE_DIR)
+            .arg("pull")
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    let mut message = String::from("Fehler beim Pullen des neuen Codes: ");
+                    message.push_str(command_output_formater(&output).as_str());
+                    return Err(message);
+                }
+            }
+            Err(message) => {
+                return Err(message.to_string());
+            }
+        }
+    }
+    println!("Fertig.");
+    println!("Compile den Source Code...");
+    match Command::new("make")
+        .current_dir(settings::UDPATE_DIR)
+        .arg("install")
+        .output()
+    {
+        Ok(output) => {
+            if !output.status.success() {
+                let mut message = String::from("Fehler bei der Installation.");
+                message.push_str(command_output_formater(&output).as_str());
+                return Err(message);
+            }
+        }
+        Err(err) => {
+            return Err(format!("Fehler bei der Installation: {}", err));
+        }
+    }
+
+    println!("Fertig!");
+    println!("Die neuste Version ist jetzt installiert.");
+    Ok(())
 }
