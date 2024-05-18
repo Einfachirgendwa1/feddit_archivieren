@@ -62,6 +62,7 @@ async fn main() {
             exit(1);
         }
     };
+
     let stderr = File::create(ERR_FILE).unwrap();
 
     File::create(PID_FILE).unwrap();
@@ -80,8 +81,6 @@ async fn main() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
         Err(e) => eprintln!("Error, {}", e),
     }
-
-    println!("Mein Penis ist hart!");
 
     // An einen Socket binden
     let listener =
