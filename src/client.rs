@@ -399,9 +399,10 @@ fn update() -> Result<(), String> {
             if !output.status.success() {
                 return Err(format!(
                     "Fehler bei der Installation.\n{}",
-                    command_output_formater(&output).as_str()
+                    command_output_formater(&output)
                 ));
             }
+            println!("{}", command_output_formater(&output));
         }
         Err(err) => {
             return Err(format!("Fehler bei der Installation: {}", err));
