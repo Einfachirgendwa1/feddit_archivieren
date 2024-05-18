@@ -379,6 +379,12 @@ fn update() -> Result<(), String> {
         || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
     {
         // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
+        println!(
+            "Klone {} nach {}...",
+            settings::GITHUB_LINK,
+            settings::UDPATE_DIR
+        );
+
         match Command::new("git")
             .arg("clone")
             .arg(settings::GITHUB_LINK)
