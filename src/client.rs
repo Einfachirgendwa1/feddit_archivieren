@@ -466,3 +466,7 @@ fn start_daemon() {
         }
     }
 }
+
+/// Funktion die vom Archive-Thread ausgeführt wird
+#[allow(dead_code)]
+fn archive() {}
