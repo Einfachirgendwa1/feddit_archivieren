@@ -84,8 +84,6 @@ fn main() {
             if root() {
                 chmod(settings::DAEMON_PATH, "777");
                 chmod(settings::CLIENT_PATH, "777");
-
-                chmod(settings::UDPATE_DIR, "777");
             }
 
             println!("Installation erfolgreich!");
