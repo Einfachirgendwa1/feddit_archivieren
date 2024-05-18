@@ -383,6 +383,7 @@ fn update() -> Result<(), String> {
             .arg("clone")
             .arg(settings::GITHUB_LINK)
             .arg(settings::UDPATE_DIR)
+            .arg("--force")
             .output()
         {
             Ok(output) => {
