@@ -123,10 +123,12 @@ async fn main() {
     }
 }
 
+/// Ändert die Berechtigungen einer Datei zu read-write für alle Nutzer
 fn chmod_to_non_root(filepath: &str) {
     if root() {
         chmod(filepath, "666")
     }
 }
 
+/// Wird ausgeführt nachdem stop empfangen wurde
 fn shutdown_preperations() {}
