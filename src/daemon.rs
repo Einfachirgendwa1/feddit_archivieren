@@ -1,5 +1,3 @@
-extern crate daemonize;
-
 use daemonize::Daemonize;
 use helpers::root;
 use std::{
