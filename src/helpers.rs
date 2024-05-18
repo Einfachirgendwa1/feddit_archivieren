@@ -11,7 +11,7 @@ use crate::settings::{self, PID_FILE};
 #[allow(dead_code)]
 pub fn feddit_archivieren_assert(condition: bool, message: &str) {
     if !condition {
-        println!("{}", message);
+        eprintln!("{}", message);
         exit(1);
     }
 }

@@ -1,7 +1,7 @@
 use std::{
     env::args,
     fs::{create_dir, remove_dir_all, remove_file, File},
-    io::{stdout, BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Write},
     net::TcpStream,
     path::Path,
     process::{exit, Command},
@@ -27,36 +27,42 @@ fn main() {
         "install" => {
             feddit_archivieren_assert(!daemon_running(), "Es läuft aktuell schon ein Daemon!");
 
+            // Die alten Binarys löschen
             remove_if_existing(settings::DAEMON_PATH);
+            remove_if_existing(settings::CLIENT_PATH);
+
+            // Die neuen an die richtige Stelle kopieren
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
+            copy_file("target/debug/client", settings::CLIENT_PATH);
+
+            // Jedem Benutzer read-write-execute Rechte für die Dateien geben, wenn möglich
             if root() {
                 chmod(settings::DAEMON_PATH, "777");
-            }
-
-            remove_if_existing(settings::CLIENT_PATH);
-            copy_file("target/debug/client", settings::CLIENT_PATH);
-            if root() {
                 chmod(settings::CLIENT_PATH, "777");
             }
 
             println!("Installation erfolgreich!");
         }
         "start" => {
-            create_run_dir();
             feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft bereits.");
-            let mut launch_command = Command::new(settings::DAEMON_PATH);
-            match launch_command.output() {
+
+            // Das Run-Verzeichnis für den Daemon erstellen
+            create_run_dir();
+
+            // Den Daemon launchen
+            match Command::new(settings::DAEMON_PATH).output() {
                 Ok(output) => {
-                    if output.status.success() {
-                        println!("Daemon erfolgreich gestartet!");
-                        exit(0);
+                    if !output.status.success() {
+                        eprintln!("Fehler beim Starten des Daemons:");
+                        eprintln!("{}", command_output_formater(&output));
+                        exit(1);
                     }
-                    println!("Fehler beim Starten des Daemons:");
-                    println!("{}", command_output_formater(&output));
-                    exit(1);
+
+                    println!("Daemon erfolgreich gestartet!");
+                    exit(0);
                 }
                 Err(err) => {
-                    println!("Fehler beim Starten des Daemons: {}", err);
+                    eprintln!("Fehler beim Starten des Daemons: {}", err);
                     exit(1);
                 }
             }
@@ -67,68 +73,81 @@ fn main() {
         "kill_maybe" => {
             if daemon_running() {
                 kill_daemon();
-            } else {
-                println!("Der Bruder ist schon tot :( (Agavendicksaft Moment)")
             }
         }
         "update" => {
             feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
             feddit_archivieren_assert(root(), "Du must root sein.");
 
+            // Die Update Funktion rufen, auf das Ergebnis reagieren
             if let Err(message) = update() {
-                println!("Fehler beim Updaten: ");
-                println!("{}", message);
+                eprintln!("Fehler beim Updaten: ");
+                eprintln!("{}", message);
                 exit(1);
             } else {
                 println!("Update erfolgreich abgeschlossen.");
             }
+
             exit(0);
         }
         "update_local" => {
+            feddit_archivieren_assert(root(), "Du must root sein.");
+
+            // TODO: Besser Lösung mit "stop" implementieren
             if daemon_running() {
                 kill_daemon();
             }
 
-            feddit_archivieren_assert(root(), "Du must root sein.");
-
+            // `make clean install` ausführen
             match Command::new("make").arg("clean").arg("install").output() {
                 Ok(output) => {
                     if !output.status.success() {
-                        println!("Fehler bei der Installation.");
-                        println!("{}", command_output_formater(&output));
+                        eprintln!("Fehler bei der Installation.");
+                        eprintln!("{}", command_output_formater(&output));
                         exit(1);
                     }
                 }
                 Err(err) => {
-                    println!("Fehler bei der Installation: {}", err);
+                    eprintln!("Fehler bei der Installation: {}", err);
                     exit(1);
                 }
             }
             println!("Lokales Update erfolgreich abgeschlossen.");
+            exit(0);
         }
         "clean" => {
+            let mut exit_code = 0;
+            // Löscht RUN_DIR und UPDATE_DIR
             if Path::new(settings::RUN_DIR).exists() {
                 if let Err(error) = remove_dir_all(settings::RUN_DIR) {
-                    println!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
+                    eprintln!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
+                    exit_code = 1;
                 }
             }
             if Path::new(settings::UDPATE_DIR).exists() {
                 if let Err(error) = remove_dir_all(settings::UDPATE_DIR) {
-                    println!(
+                    eprintln!(
                         "Fehler beim Löschen von {}: {}",
                         settings::UDPATE_DIR,
                         error
                     );
+                    exit_code = 1;
                 }
             }
+            exit(exit_code);
         }
         "info" => {
-            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
-            println!("Der Daemon läuft.");
-            println!("Port:\t{}", get(settings::SOCKET_FILE));
-            println!("PID:\t{}", get(settings::PID_FILE));
+            if !daemon_running() {
+                println!("Der Daemon läuft nicht.")
+            } else {
+                println!("Der Daemon läuft.");
+                println!("Port:\t{}", get(settings::SOCKET_FILE));
+                println!("PID:\t{}", get(settings::PID_FILE));
+            }
         }
         "logs_static" => {
+            // Printet den Inhalt von OUT_FILE und ERR_FILE
+
             match File::open(settings::OUT_FILE) {
                 Ok(file) => {
                     let mut iterator = BufReader::new(&file).lines().peekable();
@@ -160,12 +179,14 @@ fn main() {
                     }
                 }
                 Err(err) => {
-                    println!("Fehler beim Lesen von {}: {}", settings::ERR_FILE, err);
+                    eprintln!("Fehler beim Lesen von {}: {}", settings::ERR_FILE, err);
                 }
             }
         }
         "checkhealth" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+
+            // Schickt `ping` an den Daemon, erwartet `pong`
 
             println!("Versuche Daten in den Stream zu schreiben.");
             let mut stream = send_to_daemon("ping");
@@ -183,6 +204,9 @@ fn main() {
         }
         "stop" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+
+            // Sendet `stop` an den Daemon, erwartet `ok`
+
             let mut stream = send_to_daemon("stop");
             let response = read_from_stream(&mut stream);
             feddit_archivieren_assert(
@@ -193,20 +217,22 @@ fn main() {
                 )
                 .as_str(),
             );
+
+            // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
             let start = Instant::now();
-            loop {
-                if !daemon_running() || start.elapsed() > Duration::from_secs(1) {
-                    break;
-                }
-            }
+            while daemon_running() && start.elapsed() < Duration::from_secs(1) {}
+
             feddit_archivieren_assert(
                 !daemon_running(),
                 "Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.",
             );
+
             println!("Der Daemon wurde erfolgreich beendet!");
         }
         "listen" => {
             feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+
+            // Sendet `listen` an den Daemon, printet alles was empfangen wird
             let mut stream = send_to_daemon("listen");
             loop {
                 let response = read_from_stream(&mut stream);
@@ -215,7 +241,6 @@ fn main() {
                     exit(0);
                 }
                 println!("{}", response);
-                stdout().flush().unwrap();
             }
         }
         _ => {
@@ -225,58 +250,71 @@ fn main() {
     }
 }
 
+/// Kopiert eine Datei von from zu to
 fn copy_file(from: &str, to: &str) {
     run_install_command(Command::new("cp").arg(from).arg(to));
 }
 
+/// Returnt true wenn das Run-Verzeichnis existiert, false wenn nicht
+fn run_dir_exists() -> bool {
+    Path::new(settings::RUN_DIR).exists()
+}
+
+/// Erstellt das Verzeichnis in das der Daemon seine Logs und Informationen schreibt, wenn es noch
+/// nicht existiert
 fn create_run_dir() {
-    if !Path::new(settings::RUN_DIR).exists() {
-        let result = create_dir(settings::RUN_DIR);
-        if result.is_err() {
-            println!(
-                "Fehler beim Erstellen von {}: {}",
-                settings::RUN_DIR,
-                result.unwrap_err()
-            );
+    if !run_dir_exists() {
+        if let Err(err) = create_dir(settings::RUN_DIR) {
+            eprintln!("Fehler beim Erstellen von {}: {}", settings::RUN_DIR, err);
             exit(1);
         }
     }
 }
 
+/// Löscht eine Datei, sollte sie existieren
 fn remove_if_existing(filepath: &str) {
     if Path::new(filepath).exists() {
         if let Err(err) = remove_file(filepath) {
-            println!("Fehler beim Löschen von {}: {}", filepath, err);
+            eprintln!("Fehler beim Löschen von {}: {}", filepath, err);
+            exit(1);
         }
     }
 }
 
+/// Killt den Daemon (unsichere Variante von stop)
 fn kill_daemon() {
     feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
     feddit_archivieren_assert(root(), "Du bist nicht root.");
 
-    create_run_dir();
+    if !run_dir_exists() {
+        eprintln!("Der Daemon läuft, aber {} existiert nicht, weshalb ich nicht weiß wen ich killen soll.", settings::RUN_DIR);
+        eprintln!("Probiers mal mit dem pkill Befehl?");
+    }
 
     match Command::new("kill").arg(read_pid_file()).output() {
         Ok(output) => {
             if !output.status.success() {
-                println!("Fehler beim Killen des Daemons:");
-                println!("{}", command_output_formater(&output));
+                eprintln!("Fehler beim Killen des Daemons:");
+                eprintln!("{}", command_output_formater(&output));
             } else {
                 println!("Daemon erfolgreich gekillt.");
             }
         }
         Err(err) => {
-            println!("Fehler beim Killen des Daemons: {}", err);
+            eprintln!("Fehler beim Killen des Daemons: {}", err);
         }
     }
 }
 
+/// Öffnet einen TcpStream mit dem Daemon und schreibt eine Nachricht hinein.
+/// Returnt am Ende den erstellten TcpStream.
 fn send_to_daemon(message: &str) -> TcpStream {
+    // Den Stream erstellen
+    // Das Ziel ist die Adresse die der Daemon ins SOCKET_FILE geschrieben hat
     let mut stream = match TcpStream::connect(get(settings::SOCKET_FILE)) {
         Ok(stream) => stream,
         Err(err) => {
-            println!(
+            eprintln!(
                 "Fehler beim Verbinden mit {}: {}",
                 settings::SOCKET_FILE,
                 err
@@ -284,23 +322,21 @@ fn send_to_daemon(message: &str) -> TcpStream {
             exit(1);
         }
     };
+
+    // Die Nachricht in den Stream schreiben
     if let Err(err) = stream.write_all(message.as_bytes()) {
-        println!("Fehler beim Senden an den Daemon: {}", err);
+        eprintln!("Fehler beim Senden an den Daemon: {}", err);
         exit(1);
     }
+
+    // Den Stream returnen
     stream
 }
 
+/// Updatet das Programm
 fn update() -> Result<(), String> {
     if !Path::new(settings::UDPATE_DIR).exists() {
-        let result = create_dir(settings::UDPATE_DIR);
-        if result.is_err() {
-            println!(
-                "Fehler beim Erstellen von {}: {}",
-                settings::UDPATE_DIR,
-                result.unwrap_err()
-            );
-        }
+        // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
         match Command::new("git")
             .arg("clone")
             .arg(settings::GITHUB_LINK)
@@ -308,22 +344,28 @@ fn update() -> Result<(), String> {
             .output()
         {
             Ok(output) => {
-                println!("{}", command_output_formater(&output));
                 if !output.status.success() {
-                    println!("Fehler beim Klonen.");
-                    exit(1);
+                    return Err(format!(
+                        "Fehler beim Klonen von {} nach {}:\n{}",
+                        settings::GITHUB_LINK,
+                        settings::UDPATE_DIR,
+                        command_output_formater(&output)
+                    ));
                 }
+                println!("{}", command_output_formater(&output));
             }
+
             Err(err) => {
-                println!(
+                return Err(format!(
                     "Fehler beim Klonen von {} nach {}: {}",
                     settings::GITHUB_LINK,
                     settings::UDPATE_DIR,
                     err
-                );
+                ));
             }
         }
     } else {
+        // Das Directory existiert schon, daher pullen wir einfach den neuen Code
         match Command::new("git")
             .current_dir(settings::UDPATE_DIR)
             .arg("pull")
@@ -341,8 +383,11 @@ fn update() -> Result<(), String> {
             }
         }
     }
+
     println!("Fertig.");
     println!("Compile den Source Code...");
+
+    // Den Code mithilfe des Makefiles compilen und installieren
     match Command::new("make")
         .current_dir(settings::UDPATE_DIR)
         .arg("install")
