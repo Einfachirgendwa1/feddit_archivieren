@@ -401,7 +401,6 @@ fn update() -> Result<(), String> {
                     command_output_formater(&output)
                 ));
             }
-            println!("{}", command_output_formater(&output));
         }
         Err(err) => {
             return Err(format!("Fehler bei der Installation: {}", err));
