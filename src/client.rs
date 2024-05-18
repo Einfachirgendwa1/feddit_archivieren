@@ -389,7 +389,6 @@ fn update() -> Result<(), String> {
             .arg("clone")
             .arg(settings::GITHUB_LINK)
             .arg(settings::UDPATE_DIR)
-            .arg("--force")
             .output()
         {
             Ok(output) => {
@@ -419,6 +418,7 @@ fn update() -> Result<(), String> {
         match Command::new("git")
             .current_dir(settings::UDPATE_DIR)
             .arg("pull")
+            .arg("--force")
             .output()
         {
             Ok(output) => {
