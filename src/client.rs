@@ -1,5 +1,5 @@
+use clap::{ArgAction, Parser, Subcommand};
 use std::{
-    env::args,
     fs::{create_dir, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
     net::TcpStream,
@@ -16,16 +16,47 @@ use helpers::{
 mod helpers;
 mod settings;
 
-fn main() {
-    let args = args().collect::<Vec<String>>();
-    if args.len() <= 1 {
-        println!("Kein Befehl angegeben.");
-        exit(1);
-    }
+#[derive(Subcommand)]
+enum Commands {
+    Install,
+    Start,
+    Kill,
+    KillMaybe,
+    Update,
+    UpdateLocal,
+    Clean,
+    Info,
+    LogsStatic,
+    Checkhealth,
+    Stop,
+    Listen,
+}
 
-    match args.get(1).unwrap().as_str() {
-        "install" => {
-            feddit_archivieren_assert(!daemon_running(), "Es läuft aktuell schon ein Daemon!");
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    subcommand: Commands,
+
+    #[arg(short, long, action = ArgAction::SetTrue, global = true)]
+    force: bool,
+}
+
+fn main() {
+    let args = Cli::parse();
+    let force = args.force;
+
+    match args.subcommand {
+        Commands::Install => {
+            if daemon_running() {
+                if force {
+                    kill_daemon();
+                } else {
+                    eprintln!("Es läuft aktuell schon ein Daemon!");
+                    exit(1);
+                }
+            }
 
             // Die alten Binarys löschen
             remove_if_existing(settings::DAEMON_PATH);
@@ -43,41 +74,33 @@ fn main() {
 
             println!("Installation erfolgreich!");
         }
-        "start" => {
-            feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft bereits.");
-
-            // Das Run-Verzeichnis für den Daemon erstellen
-            create_run_dir();
-
-            // Den Daemon launchen
-            match Command::new(settings::DAEMON_PATH).output() {
-                Ok(output) => {
-                    if !output.status.success() {
-                        eprintln!("Fehler beim Starten des Daemons:");
-                        eprintln!("{}", command_output_formater(&output));
-                        exit(1);
-                    }
-
-                    println!("Daemon erfolgreich gestartet!");
-                    exit(0);
-                }
-                Err(err) => {
-                    eprintln!("Fehler beim Starten des Daemons: {}", err);
+        Commands::Start => {
+            if daemon_running() {
+                if force {
+                    kill_daemon();
+                } else {
+                    eprintln!("Der Daemon läuft bereits.");
                     exit(1);
                 }
             }
+
+            start_daemon();
         }
-        "kill" => {
+        Commands::Kill => {
             kill_daemon();
         }
-        "kill_maybe" => {
+        Commands::KillMaybe => {
             if daemon_running() {
                 kill_daemon();
             }
         }
-        "update" => {
-            feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
-            feddit_archivieren_assert(root(), "Du must root sein.");
+        Commands::Update => {
+            if force && daemon_running() {
+                kill_daemon();
+            } else {
+                feddit_archivieren_assert(!daemon_running(), "Der Daemon läuft gerade.");
+                feddit_archivieren_assert(root(), "Du must root sein.");
+            }
 
             // Die Update Funktion rufen, auf das Ergebnis reagieren
             if let Err(message) = update() {
@@ -90,8 +113,10 @@ fn main() {
 
             exit(0);
         }
-        "update_local" => {
-            feddit_archivieren_assert(root(), "Du must root sein.");
+        Commands::UpdateLocal => {
+            if !force {
+                feddit_archivieren_assert(root(), "Du must root sein.");
+            }
 
             // TODO: Besser Lösung mit "stop" implementieren
             if daemon_running() {
@@ -115,7 +140,7 @@ fn main() {
             println!("Lokales Update erfolgreich abgeschlossen.");
             exit(0);
         }
-        "clean" => {
+        Commands::Clean => {
             let mut exit_code = 0;
             // Löscht RUN_DIR und UPDATE_DIR
             if Path::new(settings::RUN_DIR).exists() {
@@ -136,7 +161,7 @@ fn main() {
             }
             exit(exit_code);
         }
-        "info" => {
+        Commands::Info => {
             if !daemon_running() {
                 println!("Der Daemon läuft nicht.")
             } else {
@@ -145,7 +170,7 @@ fn main() {
                 println!("PID:\t{}", get(settings::PID_FILE));
             }
         }
-        "logs_static" => {
+        Commands::LogsStatic => {
             // Printet den Inhalt von OUT_FILE und ERR_FILE
 
             match File::open(settings::OUT_FILE) {
@@ -183,8 +208,12 @@ fn main() {
                 }
             }
         }
-        "checkhealth" => {
-            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+        Commands::Checkhealth => {
+            if force && !daemon_running() {
+                start_daemon();
+            } else {
+                feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            }
 
             // Schickt `ping` an den Daemon, erwartet `pong`
 
@@ -202,8 +231,12 @@ fn main() {
             println!("Nachricht pong erfolgreich empfangen!");
             println!("Der Daemon scheint zu funktionieren.");
         }
-        "stop" => {
-            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+        Commands::Stop => {
+            if force && !daemon_running() {
+                start_daemon();
+            } else {
+                feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            }
 
             // Sendet `stop` an den Daemon, erwartet `ok`
 
@@ -229,8 +262,12 @@ fn main() {
 
             println!("Der Daemon wurde erfolgreich beendet!");
         }
-        "listen" => {
-            feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+        Commands::Listen => {
+            if force && !daemon_running() {
+                start_daemon();
+            } else {
+                feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
+            }
 
             // Sendet `listen` an den Daemon, printet alles was empfangen wird
             let mut stream = send_to_daemon("listen");
@@ -242,10 +279,6 @@ fn main() {
                 }
                 println!("{}", response);
             }
-        }
-        _ => {
-            println!("Unbekannter Befehl.");
-            exit(1);
         }
     }
 }
@@ -366,7 +399,7 @@ fn update() -> Result<(), String> {
     } else {
         // Das Directory existiert schon, daher pullen wir einfach den neuen Code
         println!("Altes Update Directory gefunden! Pulle den neuen Code...");
-        println!("Info: Dadurch, dass das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
+        println!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
         match Command::new("git")
             .current_dir(settings::UDPATE_DIR)
             .arg("pull")
@@ -410,4 +443,26 @@ fn update() -> Result<(), String> {
     println!("Fertig!");
     println!("Die neuste Version ist jetzt installiert.");
     Ok(())
+}
+
+fn start_daemon() {
+    // Das Run-Verzeichnis für den Daemon erstellen
+    create_run_dir();
+
+    // Den Daemon launchen
+    match Command::new(settings::DAEMON_PATH).output() {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Fehler beim Starten des Daemons:");
+                eprintln!("{}", command_output_formater(&output));
+                exit(1);
+            }
+
+            println!("Daemon erfolgreich gestartet!");
+        }
+        Err(err) => {
+            eprintln!("Fehler beim Starten des Daemons: {}", err);
+            exit(1);
+        }
+    }
 }
