@@ -48,7 +48,7 @@ pub fn daemon_running() -> bool {
 
 /// Ändert die Berechtigungen von `filepath` zu `mode`
 pub fn chmod(filepath: &str, mode: &str) {
-    run_install_command(Command::new("chmod").arg(mode).arg(filepath))
+    run_command(Command::new("chmod").arg(mode).arg(filepath))
 }
 
 /// Returnt true wenn das Programm mit root gestartet wurde, sonst false
@@ -57,17 +57,17 @@ pub fn root() -> bool {
 }
 
 /// Führt einen Befehl aus und exitet mit einer Fehlermeldung sobald ein Fehler auftritt
-pub fn run_install_command(command: &mut Command) {
+pub fn run_command(command: &mut Command) {
     match command.output() {
         Ok(output) => {
             if !output.status.success() {
-                eprintln!("Fehler bei der Installation:");
+                eprintln!("Fehler bei einem Befehl:");
                 eprintln!("{}", command_output_formater(&output));
                 exit(1);
             }
         }
         Err(err) => {
-            eprintln!("Fehler bei der Installation: {}", err);
+            eprintln!("Fehler bei einem Befehl: {}", err);
             exit(1);
         }
     }
