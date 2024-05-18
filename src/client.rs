@@ -466,3 +466,7 @@ fn start_daemon() {
         }
     }
 }
+
+/// Funktion die vom Feddit-Thread ausgeführt wird
+#[allow(dead_code)]
+fn feddit() {}
