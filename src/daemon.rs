@@ -168,3 +168,9 @@ fn shutdown_preperations(streams: &Vec<TcpStream>) {
         stream.shutdown(std::net::Shutdown::Both).unwrap();
     }
 }
+
+/// Funktion die der Feddit-Thread ausführt
+#[allow(dead_code)]
+fn feddit() {
+    todo!()
+}
