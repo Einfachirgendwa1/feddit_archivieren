@@ -120,9 +120,6 @@ fn main() {
                 .output()
             {
                 Ok(output) => {
-                    dbg!(&output);
-                    println!("{:?}", output.stdout);
-                    println!("{:?}", output.stderr);
                     if !output.status.success() {
                         println!("Fehler bei der Installation.");
                         println!("{}", command_output_formater(&output));
