@@ -30,6 +30,7 @@ enum Commands {
     Checkhealth,
     Stop,
     Listen,
+    Uninstall,
 }
 
 #[derive(Parser)]
@@ -141,25 +142,7 @@ fn main() {
             exit(0);
         }
         Commands::Clean => {
-            let mut exit_code = 0;
-            // Löscht RUN_DIR und UPDATE_DIR
-            if Path::new(settings::RUN_DIR).exists() {
-                if let Err(error) = remove_dir_all(settings::RUN_DIR) {
-                    eprintln!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
-                    exit_code = 1;
-                }
-            }
-            if Path::new(settings::UDPATE_DIR).exists() {
-                if let Err(error) = remove_dir_all(settings::UDPATE_DIR) {
-                    eprintln!(
-                        "Fehler beim Löschen von {}: {}",
-                        settings::UDPATE_DIR,
-                        error
-                    );
-                    exit_code = 1;
-                }
-            }
-            exit(exit_code);
+            exit(clean());
         }
         Commands::Info => {
             if !daemon_running() {
@@ -278,6 +261,15 @@ fn main() {
                     exit(0);
                 }
                 println!("{}", response);
+            }
+        }
+        Commands::Uninstall => {
+            clean();
+            if let Err(err) = remove_file(settings::CLIENT_PATH) {
+                eprintln!("Fehler beim Löschen von {}: {}", settings::CLIENT_PATH, err);
+            }
+            if let Err(err) = remove_file(settings::DAEMON_PATH) {
+                eprintln!("Fehler beim Löschen von {}: {}", settings::DAEMON_PATH, err);
             }
         }
     }
@@ -493,4 +485,26 @@ fn get_update_version() -> String {
 
 fn get_current_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Löscht RUN_DIR und UPDATE_DIR
+fn clean() -> i32 {
+    let mut exit_code = 0;
+    if Path::new(settings::RUN_DIR).exists() {
+        if let Err(error) = remove_dir_all(settings::RUN_DIR) {
+            eprintln!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
+            exit_code = 1;
+        }
+    }
+    if Path::new(settings::UDPATE_DIR).exists() {
+        if let Err(error) = remove_dir_all(settings::UDPATE_DIR) {
+            eprintln!(
+                "Fehler beim Löschen von {}: {}",
+                settings::UDPATE_DIR,
+                error
+            );
+            exit_code = 1;
+        }
+    }
+    exit_code
 }
