@@ -366,7 +366,7 @@ fn update() -> Result<(), String> {
     } else {
         // Das Directory existiert schon, daher pullen wir einfach den neuen Code
         println!("Altes Update Directory gefunden! Pulle den neuen Code...");
-        println!("Info: Dadurch das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
+        println!("Info: Dadurch, dass das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
         match Command::new("git")
             .current_dir(settings::UDPATE_DIR)
             .arg("pull")
