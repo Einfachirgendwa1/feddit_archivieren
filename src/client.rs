@@ -397,9 +397,10 @@ fn update() -> Result<(), String> {
     {
         Ok(output) => {
             if !output.status.success() {
-                let mut message = String::from("Fehler bei der Installation.");
-                message.push_str(command_output_formater(&output).as_str());
-                return Err(message);
+                return Err(format!(
+                    "Fehler bei der Installation.\n{}",
+                    command_output_formater(&output).as_str()
+                ));
             }
         }
         Err(err) => {
