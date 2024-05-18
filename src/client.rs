@@ -67,7 +67,9 @@ fn main() {
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
             copy_file("target/debug/client", settings::CLIENT_PATH);
 
-            // Das Update dir erstellen
+            // Das Update und Run-Verzeichnis erstellen
+            create_run_dir();
+
             if !Path::new(settings::UDPATE_DIR).exists() {
                 if let Err(err) = create_dir(settings::UDPATE_DIR) {
                     eprintln!(
