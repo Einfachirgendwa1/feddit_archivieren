@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{ArgAction, Parser, Subcommand};
 use std::{
     fs::{create_dir, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
@@ -16,23 +16,39 @@ use helpers::{
 mod helpers;
 mod settings;
 
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[arg(short, long)]
-    subcommand: String,
+#[derive(Subcommand)]
+enum Commands {
+    Install,
+    Start,
+    Kill,
+    KillMaybe,
+    Update,
+    UpdateLocal,
+    Clean,
+    Info,
+    LogsStatic,
+    Checkhealth,
+    Stop,
+    Listen,
+}
 
-    #[arg(short, long)]
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    subcommand: Commands,
+
+    #[arg(short, long, action = ArgAction::SetTrue, global = true)]
     force: bool,
 }
 
 fn main() {
-    let args = Args::parse();
-    dbg!(&args);
+    let args = Cli::parse();
     let force = args.force;
 
-    match args.subcommand.as_str() {
-        "install" => {
+    match args.subcommand {
+        Commands::Install => {
             if daemon_running() {
                 if force {
                     kill_daemon();
@@ -58,7 +74,7 @@ fn main() {
 
             println!("Installation erfolgreich!");
         }
-        "start" => {
+        Commands::Start => {
             if daemon_running() {
                 if force {
                     kill_daemon();
@@ -70,15 +86,15 @@ fn main() {
 
             start_daemon();
         }
-        "kill" => {
+        Commands::Kill => {
             kill_daemon();
         }
-        "kill_maybe" => {
+        Commands::KillMaybe => {
             if daemon_running() {
                 kill_daemon();
             }
         }
-        "update" => {
+        Commands::Update => {
             if force && daemon_running() {
                 kill_daemon();
             } else {
@@ -97,7 +113,7 @@ fn main() {
 
             exit(0);
         }
-        "update_local" => {
+        Commands::UpdateLocal => {
             if !force {
                 feddit_archivieren_assert(root(), "Du must root sein.");
             }
@@ -124,7 +140,7 @@ fn main() {
             println!("Lokales Update erfolgreich abgeschlossen.");
             exit(0);
         }
-        "clean" => {
+        Commands::Clean => {
             let mut exit_code = 0;
             // Löscht RUN_DIR und UPDATE_DIR
             if Path::new(settings::RUN_DIR).exists() {
@@ -145,7 +161,7 @@ fn main() {
             }
             exit(exit_code);
         }
-        "info" => {
+        Commands::Info => {
             if !daemon_running() {
                 println!("Der Daemon läuft nicht.")
             } else {
@@ -154,7 +170,7 @@ fn main() {
                 println!("PID:\t{}", get(settings::PID_FILE));
             }
         }
-        "logs_static" => {
+        Commands::LogsStatic => {
             // Printet den Inhalt von OUT_FILE und ERR_FILE
 
             match File::open(settings::OUT_FILE) {
@@ -192,7 +208,7 @@ fn main() {
                 }
             }
         }
-        "checkhealth" => {
+        Commands::Checkhealth => {
             if force && !daemon_running() {
                 start_daemon();
             } else {
@@ -215,7 +231,7 @@ fn main() {
             println!("Nachricht pong erfolgreich empfangen!");
             println!("Der Daemon scheint zu funktionieren.");
         }
-        "stop" => {
+        Commands::Stop => {
             if force && !daemon_running() {
                 start_daemon();
             } else {
@@ -246,7 +262,7 @@ fn main() {
 
             println!("Der Daemon wurde erfolgreich beendet!");
         }
-        "listen" => {
+        Commands::Listen => {
             if force && !daemon_running() {
                 start_daemon();
             } else {
@@ -263,10 +279,6 @@ fn main() {
                 }
                 println!("{}", response);
             }
-        }
-        _ => {
-            println!("Unbekannter Befehl.");
-            exit(1);
         }
     }
 }

@@ -3,5 +3,5 @@ clean:
 
 install:
 	@cargo build
-	@target/debug/client --subcommand install
+	@target/debug/client install
 	@-cp feddit_archivieren.zsh /usr/share/zsh/site-functions/_feddit_archivieren.zsh
