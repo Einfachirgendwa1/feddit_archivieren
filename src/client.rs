@@ -1,6 +1,6 @@
 use clap::{ArgAction, Parser, Subcommand};
 use std::{
-    fs::{create_dir, remove_dir_all, remove_file, File},
+    fs::{create_dir, read_to_string, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
     net::TcpStream,
     path::Path,
@@ -419,6 +419,17 @@ fn update() -> Result<(), String> {
     }
 
     println!("Fertig!");
+
+    if get_current_version() == get_update_version() {
+        println!("Bereits die neuste Version.");
+        return Ok(());
+    }
+
+    println!(
+        "Neue Version gefunden: {} -> {}",
+        get_current_version(),
+        get_update_version()
+    );
     println!("Compile den Source Code...");
 
     // Den Code mithilfe des Makefiles compilen und installieren
@@ -465,4 +476,18 @@ fn start_daemon() {
             exit(1);
         }
     }
+}
+
+fn get_update_version() -> String {
+    let content = read_to_string(format!("{}/Cargo.toml", settings::UDPATE_DIR)).unwrap();
+    let toml: toml::Value = content.parse().unwrap();
+    toml.get("package")
+        .and_then(|package| package.get("version"))
+        .and_then(|version| version.as_str())
+        .unwrap()
+        .to_string()
+}
+
+fn get_current_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
