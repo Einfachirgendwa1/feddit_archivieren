@@ -10,7 +10,7 @@ use std::{
 
 use helpers::{
     chmod, command_output_formater, daemon_running, feddit_archivieren_assert, get,
-    read_from_stream, read_pid_file, root, run_install_command,
+    read_from_stream, read_pid_file, root, run_command,
 };
 
 mod helpers;
@@ -252,7 +252,7 @@ fn main() {
 
 /// Kopiert eine Datei von from zu to
 fn copy_file(from: &str, to: &str) {
-    run_install_command(Command::new("cp").arg(from).arg(to));
+    run_command(Command::new("cp").arg(from).arg(to));
 }
 
 /// Returnt true wenn das Run-Verzeichnis existiert, false wenn nicht
