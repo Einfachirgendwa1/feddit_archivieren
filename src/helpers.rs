@@ -163,6 +163,29 @@ pub fn update(
         || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
     {
         // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
+        match Command::new("git")
+            .arg("reset")
+            .arg("--hard")
+            .arg("HEAD")
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    return Err(format!(
+                        "Fehler beim Resetten der Lokalen changes in {}: {}",
+                        settings::UDPATE_DIR,
+                        command_output_formater(&output)
+                    ));
+                }
+            }
+            Err(err) => {
+                return Err(format!(
+                    "Fehler beim Resetten der Lokalen changes in {}: {}",
+                    settings::UDPATE_DIR,
+                    err
+                ));
+            }
+        }
         print_maybe_override!(format!(
             "Klone {} nach {}...",
             settings::GITHUB_LINK,
