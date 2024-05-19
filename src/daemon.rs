@@ -2,19 +2,20 @@ use daemonize::Daemonize;
 use helpers::root;
 use std::{
     fs::File,
-    io::{ErrorKind, Write},
+    io::{BufWriter, ErrorKind, Write},
     net::{TcpListener, TcpStream},
     process::exit,
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
 };
+
 mod helpers;
 mod settings;
 
 use crate::{
     helpers::{chmod, daemon_running, pid_file_exists, read_from_stream, update},
-    settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
+    settings::{ERR_FILE, OUT_FILE, PID_FILE, POST_FILE, SOCKET_FILE, URL_FILE},
 };
 
 macro_rules! unwrap_mutex_save {
@@ -31,6 +32,9 @@ macro_rules! unwrap_mutex_save {
 }
 
 fn main() {
+    let url = settings::FEDDIT_LINK;
+    let posts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
+
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -56,9 +60,10 @@ fn main() {
         }
     };
 
-    let stderr = File::create(ERR_FILE).unwrap();
-
+    File::create(URL_FILE).unwrap();
+    File::create(POST_FILE).unwrap();
     File::create(PID_FILE).unwrap();
+    let stderr = File::create(ERR_FILE).unwrap();
 
     let daemonize = Daemonize::new()
         .pid_file(PID_FILE)
@@ -69,6 +74,8 @@ fn main() {
     chmod_to_non_root(OUT_FILE);
     chmod_to_non_root(ERR_FILE);
     chmod_to_non_root(PID_FILE);
+    chmod_to_non_root(URL_FILE);
+    chmod_to_non_root(POST_FILE);
 
     let recievers: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -110,6 +117,7 @@ fn main() {
     // Auf reinkommende Befehl hören
     for stream in listener.incoming() {
         let guard = recievers.clone();
+        let posts_guard = posts.clone();
         thread::spawn(move || match stream {
             Err(err) => {
                 eprint(
@@ -135,7 +143,7 @@ fn main() {
                     }
                     "stop" => {
                         print("Stoppe den Daemon.", guard.clone());
-                        shutdown_preperations(&*guard.lock().unwrap());
+                        shutdown_preperations(&*guard.lock().unwrap(), url, posts_guard);
                         stream.write_all(b"ok").unwrap();
                         println!("Exite.");
                         exit(0);
@@ -213,9 +221,28 @@ fn chmod_to_non_root(filepath: &str) {
 }
 
 /// Wird ausgeführt nachdem stop empfangen wurde
-fn shutdown_preperations(streams: &Vec<TcpStream>) {
+fn shutdown_preperations(streams: &Vec<TcpStream>, url: &str, posts: Arc<Mutex<Vec<i32>>>) {
     for mut stream in streams {
         stream.write(b"Tschau :)").unwrap();
         stream.shutdown(std::net::Shutdown::Both).unwrap();
     }
+
+    if let Err(err) = save(url, unwrap_mutex_save!(posts).to_vec()) {
+        println!("Fehler beim Speichern: {}", err);
+    }
+}
+
+/// Speichert den aktuellen Fortschritt
+fn save(url: &str, posts: Vec<i32>) -> Result<(), std::io::Error> {
+    let mut url_file = File::create(settings::URL_FILE)?;
+    let post_file = File::create(settings::POST_FILE)?;
+
+    url_file.write_all(url.as_bytes())?;
+
+    let mut writer = BufWriter::new(post_file);
+    for post in posts {
+        writer.write_all(post.to_string().as_bytes())?;
+    }
+
+    Ok(())
 }
