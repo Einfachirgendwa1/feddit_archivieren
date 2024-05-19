@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+
+use std::time::Duration;
 pub const DAEMON_PATH: &'static str = "/usr/bin/feddit_archive_daemon";
 pub const CLIENT_PATH: &'static str = "/usr/bin/feddit_archivieren";
 pub const RUN_DIR: &'static str = "/run/feddit_archivieren";
@@ -11,3 +13,4 @@ pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddi
 pub const TCP_BUFFER_SIZE: usize = 1024;
 pub const FEDDIT_LINK: &'static str =
     "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";
+pub const UPDATE_FETCH_DELAY: Duration = Duration::from_secs(10);

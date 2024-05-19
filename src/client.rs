@@ -1,6 +1,6 @@
 use clap::{ArgAction, Parser, Subcommand};
 use std::{
-    fs::{create_dir, read_dir, read_to_string, remove_dir_all, remove_file, File},
+    fs::{create_dir, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
     net::TcpStream,
     path::Path,
@@ -10,7 +10,7 @@ use std::{
 
 use helpers::{
     chmod, command_output_formater, daemon_running, feddit_archivieren_assert, get,
-    read_from_stream, read_pid_file, root, run_command,
+    read_from_stream, read_pid_file, root, run_command, update,
 };
 
 mod helpers;
@@ -369,109 +369,6 @@ fn send_to_daemon(message: &str) -> TcpStream {
     stream
 }
 
-/// Updatet das Programm
-fn update() -> Result<(), String> {
-    if !Path::new(settings::UDPATE_DIR).exists()
-        || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
-    {
-        // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
-        println!(
-            "Klone {} nach {}...",
-            settings::GITHUB_LINK,
-            settings::UDPATE_DIR
-        );
-
-        match Command::new("git")
-            .arg("clone")
-            .arg(settings::GITHUB_LINK)
-            .arg(settings::UDPATE_DIR)
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    return Err(format!(
-                        "Fehler beim Klonen von {} nach {}:\n{}",
-                        settings::GITHUB_LINK,
-                        settings::UDPATE_DIR,
-                        command_output_formater(&output)
-                    ));
-                }
-            }
-
-            Err(err) => {
-                return Err(format!(
-                    "Fehler beim Klonen von {} nach {}: {}",
-                    settings::GITHUB_LINK,
-                    settings::UDPATE_DIR,
-                    err
-                ));
-            }
-        }
-    } else {
-        // Das Directory existiert schon, daher pullen wir einfach den neuen Code
-        println!("Altes Update Directory gefunden! Pulle den neuen Code...");
-        println!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
-        match Command::new("git")
-            .current_dir(settings::UDPATE_DIR)
-            .arg("pull")
-            .arg("--force")
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    let mut message = String::from("Fehler beim Pullen des neuen Codes: ");
-                    message.push_str(command_output_formater(&output).as_str());
-                    return Err(message);
-                }
-            }
-            Err(message) => {
-                return Err(message.to_string());
-            }
-        }
-    }
-
-    println!("Fertig!");
-
-    if get_current_version() == get_update_version() {
-        println!("Bereits die neuste Version ({}).", get_current_version());
-        return Ok(());
-    }
-
-    println!(
-        "Neue Version gefunden: {} -> {}",
-        get_current_version(),
-        get_update_version()
-    );
-    println!("Compile den Source Code...");
-
-    // Den Code mithilfe des Makefiles compilen und installieren
-    match Command::new("make")
-        .current_dir(settings::UDPATE_DIR)
-        .arg("install")
-        .output()
-    {
-        Ok(output) => {
-            if !output.status.success() {
-                return Err(format!(
-                    "Fehler bei der Installation.\n{}",
-                    command_output_formater(&output)
-                ));
-            }
-        }
-        Err(err) => {
-            return Err(format!("Fehler bei der Installation: {}", err));
-        }
-    }
-
-    println!("Fertig!");
-    println!(
-        "Die neuste Version ({}) ist jetzt installiert.",
-        get_update_version()
-    );
-    println!("Update erfolgreich abgeschlossen.");
-    Ok(())
-}
-
 fn start_daemon() {
     // Das Run-Verzeichnis für den Daemon erstellen
     create_run_dir();
@@ -492,20 +389,6 @@ fn start_daemon() {
             exit(1);
         }
     }
-}
-
-fn get_update_version() -> String {
-    let content = read_to_string(format!("{}/Cargo.toml", settings::UDPATE_DIR)).unwrap();
-    let toml: toml::Value = content.parse().unwrap();
-    toml.get("package")
-        .and_then(|package| package.get("version"))
-        .and_then(|version| version.as_str())
-        .unwrap()
-        .to_string()
-}
-
-fn get_current_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Löscht RUN_DIR und UPDATE_DIR

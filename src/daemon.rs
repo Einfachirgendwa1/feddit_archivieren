@@ -13,12 +13,24 @@ mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream},
+    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream, update},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
 };
 
-#[tokio::main]
-async fn main() {
+macro_rules! unwrap_mutex_save {
+    ($e:expr) => {
+        *match $e.lock() {
+            Ok(lock) => lock,
+            Err(poison) => {
+                println!("Der Mutex ist gepoisent: {}", poison);
+                println!("Ignoriere den Error vorerst, dies scheint jedoch Anzeichen für einen Bug im Code zu sein.");
+                poison.into_inner()
+            }
+        }
+    }
+}
+
+fn main() {
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -26,7 +38,7 @@ async fn main() {
             println!(
                 "Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden."
             );
-            // TODO: println!("Starte mit --force um das Starten zu erzwingen.");
+            println!("Starte mit --force um das Starten zu erzwingen.");
             exit(1);
         }
     }
@@ -86,6 +98,16 @@ async fn main() {
 
     // TODO: Archive und Feddit spawnen
 
+    // Update Thread spawnen
+    let guard = recievers.clone();
+    thread::spawn(move || loop {
+        // TODO: Besser machen
+        sleep(settings::UPDATE_FETCH_DELAY);
+        if let Err(err) = update() {
+            eprint(&format!("{}", err), &*guard.lock().unwrap());
+        }
+    });
+
     // Auf reinkommende Befehl hören
     for stream in listener.incoming() {
         let guard = recievers.clone();
@@ -100,29 +122,26 @@ async fn main() {
             Ok(mut stream) => {
                 print(
                     &format!("Empfange Verbindung mit {}...", stream.peer_addr().unwrap()),
-                    &*guard.lock().unwrap(),
+                    guard.clone(),
                 );
+
                 let message = read_from_stream(&mut stream);
 
-                print(
-                    &format!("Nachricht: \"{}\"", message),
-                    &*guard.lock().unwrap(),
-                );
+                print(&format!("Nachricht: \"{}\"", message), guard.clone());
 
                 match message.as_str() {
                     "ping" => {
-                        print("Schreibe 'pong' in den stream", &*guard.lock().unwrap());
+                        print("Schreibe 'pong' in den stream", guard);
                         stream.write_all(b"pong").unwrap();
                     }
                     "stop" => {
-                        print("Stoppe den Daemon.", &*guard.lock().unwrap());
+                        print("Stoppe den Daemon.", guard.clone());
                         shutdown_preperations(&*guard.lock().unwrap());
                         stream.write_all(b"ok").unwrap();
                         println!("Exite.");
                         exit(0);
                     }
                     "listen" => {
-                        // TODO: implementieren
                         stream
                             .write_all(b"Achtung: Aktuell noch extrem unstable!")
                             .unwrap();
@@ -139,11 +158,27 @@ async fn main() {
     }
 }
 
-fn print(message: &str, streams: &Vec<TcpStream>) {
+fn print(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
     println!("{}", message);
-    for mut stream in streams {
-        stream.write(message.as_bytes()).unwrap();
+
+    let mut streams_override_idxs = Vec::new();
+
+    for (index, mut stream) in unwrap_mutex_save!(streams).iter().enumerate() {
+        if let Err(err) = stream.write(message.as_bytes()) {
+            eprintln!("Fehler beim Schreiben in einen Stream: {}", err);
+        } else {
+            streams_override_idxs.push(index);
+        }
     }
+
+    let new: Vec<TcpStream> = unwrap_mutex_save!(streams)
+        .drain(..)
+        .enumerate()
+        .filter(|(idx, _)| streams_override_idxs.contains(idx))
+        .map(|(_, stream)| stream)
+        .collect();
+    unwrap_mutex_save!(streams) = new;
+
     sleep(Duration::from_millis(1));
 }
 
