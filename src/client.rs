@@ -117,7 +117,7 @@ fn main() {
             }
 
             // Die Update Funktion rufen, auf das Ergebnis reagieren
-            if let Err(message) = update() {
+            if let Err(message) = update(None, None) {
                 eprintln!("Fehler beim Updaten: ");
                 eprintln!("{}", message);
                 exit(1);

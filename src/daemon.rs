@@ -101,10 +101,9 @@ fn main() {
     // Update Thread spawnen
     let guard = recievers.clone();
     thread::spawn(move || loop {
-        // TODO: Besser machen
         sleep(settings::UPDATE_FETCH_DELAY);
-        if let Err(err) = update() {
-            eprint(&format!("{}", err), &*guard.lock().unwrap());
+        if let Err(err) = update(Some(print), Some(guard.clone())) {
+            eprint(format!("{}", err).as_str(), guard.clone());
         }
     });
 
@@ -115,7 +114,7 @@ fn main() {
             Err(err) => {
                 eprint(
                     &format!("Fehlerhafte Verbindung empfangen: {}", err),
-                    &*guard.lock().unwrap(),
+                    guard.clone(),
                 );
                 return;
             }
@@ -182,11 +181,28 @@ fn print(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
     sleep(Duration::from_millis(1));
 }
 
-fn eprint(message: &str, streams: &Vec<TcpStream>) {
+fn eprint(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
     eprintln!("{}", message);
-    for mut stream in streams {
-        stream.write(message.as_bytes()).unwrap();
+
+    let mut streams_override_idxs = Vec::new();
+
+    for (index, mut stream) in unwrap_mutex_save!(streams).iter().enumerate() {
+        if let Err(err) = stream.write(message.as_bytes()) {
+            eprintln!("Fehler beim Schreiben in einen Stream: {}", err);
+        } else {
+            streams_override_idxs.push(index);
+        }
     }
+
+    let new: Vec<TcpStream> = unwrap_mutex_save!(streams)
+        .drain(..)
+        .enumerate()
+        .filter(|(idx, _)| streams_override_idxs.contains(idx))
+        .map(|(_, stream)| stream)
+        .collect();
+    unwrap_mutex_save!(streams) = new;
+
+    sleep(Duration::from_millis(1));
 }
 
 /// Ändert die Berechtigungen einer Datei zu read-write für alle Nutzer

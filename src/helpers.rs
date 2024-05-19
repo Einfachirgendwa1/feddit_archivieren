@@ -4,6 +4,7 @@ use std::{
     net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
+    sync::{Arc, Mutex},
 };
 
 use crate::settings::{self, PID_FILE};
@@ -144,16 +145,30 @@ fn get_current_version() -> String {
 }
 
 /// Updatet das Programm
-pub fn update() -> Result<(), String> {
+pub fn update(
+    print_override: Option<fn(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>)>,
+    print_args: Option<Arc<Mutex<Vec<TcpStream>>>>,
+) -> Result<(), String> {
+    macro_rules! print_maybe_override {
+        ($e:expr) => {
+            if print_override.is_some() {
+                print_override.unwrap()($e, print_args.clone().unwrap())
+            } else {
+                println!("{}", $e);
+            }
+        };
+    }
+
     if !Path::new(settings::UDPATE_DIR).exists()
         || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
     {
         // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
-        println!(
+        print_maybe_override!(format!(
             "Klone {} nach {}...",
             settings::GITHUB_LINK,
             settings::UDPATE_DIR
-        );
+        )
+        .as_str());
 
         match Command::new("git")
             .arg("clone")
@@ -183,8 +198,8 @@ pub fn update() -> Result<(), String> {
         }
     } else {
         // Das Directory existiert schon, daher pullen wir einfach den neuen Code
-        println!("Altes Update Directory gefunden! Pulle den neuen Code...");
-        println!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
+        print_maybe_override!("Altes Update Directory gefunden! Pulle den neuen Code...");
+        print_maybe_override!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
         match Command::new("git")
             .current_dir(settings::UDPATE_DIR)
             .arg("pull")
@@ -204,19 +219,22 @@ pub fn update() -> Result<(), String> {
         }
     }
 
-    println!("Fertig!");
+    print_maybe_override!("Fertig!");
 
     if get_current_version() == get_update_version() {
-        println!("Bereits die neuste Version ({}).", get_current_version());
+        print_maybe_override!(
+            format!("Bereits die neuste Version ({}).", get_current_version()).as_str()
+        );
         return Ok(());
     }
 
-    println!(
+    print_maybe_override!(format!(
         "Neue Version gefunden: {} -> {}",
         get_current_version(),
         get_update_version()
-    );
-    println!("Compile den Source Code...");
+    )
+    .as_str());
+    print_maybe_override!("Compile den Source Code...");
 
     // Den Code mithilfe des Makefiles compilen und installieren
     match Command::new("make")
@@ -237,11 +255,12 @@ pub fn update() -> Result<(), String> {
         }
     }
 
-    println!("Fertig!");
-    println!(
+    print_maybe_override!("Fertig!");
+    print_maybe_override!(format!(
         "Die neuste Version ({}) ist jetzt installiert.",
         get_update_version()
-    );
-    println!("Update erfolgreich abgeschlossen.");
+    )
+    .as_str());
+    print_maybe_override!("Update erfolgreich abgeschlossen.");
     Ok(())
 }
