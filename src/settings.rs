@@ -13,4 +13,4 @@ pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddi
 pub const TCP_BUFFER_SIZE: usize = 1024;
 pub const FEDDIT_LINK: &'static str =
     "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";
-pub const UPDATE_FETCH_DELAY: Duration = Duration::from_secs(10);
+pub const UPDATE_FETCH_DELAY: Duration = Duration::from_secs(60 * 15);
