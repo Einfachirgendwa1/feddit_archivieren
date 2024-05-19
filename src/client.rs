@@ -394,6 +394,11 @@ fn start_daemon() {
 /// Löscht RUN_DIR und UPDATE_DIR
 fn clean() -> i32 {
     let mut exit_code = 0;
+
+    if daemon_running() {
+        kill_daemon();
+    }
+
     if Path::new(settings::RUN_DIR).exists() {
         if let Err(error) = remove_dir_all(settings::RUN_DIR) {
             eprintln!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
