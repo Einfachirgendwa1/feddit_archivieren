@@ -2,23 +2,39 @@ use daemonize::Daemonize;
 use helpers::root;
 use std::{
     fs::File,
-    io::{ErrorKind, Write},
+    io::{BufWriter, ErrorKind, Write},
     net::{TcpListener, TcpStream},
     process::exit,
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
 };
+
 mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream},
-    settings::{ERR_FILE, OUT_FILE, PID_FILE, SOCKET_FILE},
+    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream, update},
+    settings::{ERR_FILE, OUT_FILE, PID_FILE, POST_FILE, SOCKET_FILE, URL_FILE},
 };
 
-#[tokio::main]
-async fn main() {
+macro_rules! unwrap_mutex_save {
+    ($e:expr) => {
+        *match $e.lock() {
+            Ok(lock) => lock,
+            Err(poison) => {
+                println!("Der Mutex ist gepoisent: {}", poison);
+                println!("Ignoriere den Error vorerst, dies scheint jedoch Anzeichen für einen Bug im Code zu sein.");
+                poison.into_inner()
+            }
+        }
+    }
+}
+
+fn main() {
+    let url = settings::FEDDIT_LINK;
+    let posts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
+
     // Überprüfen ob bereits ein Daemon läuft
     if pid_file_exists() {
         println!("PID Datei existiert.");
@@ -26,7 +42,7 @@ async fn main() {
             println!(
                 "Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden."
             );
-            // TODO: println!("Starte mit --force um das Starten zu erzwingen.");
+            println!("Starte mit --force um das Starten zu erzwingen.");
             exit(1);
         }
     }
@@ -44,9 +60,10 @@ async fn main() {
         }
     };
 
-    let stderr = File::create(ERR_FILE).unwrap();
-
+    File::create(URL_FILE).unwrap();
+    File::create(POST_FILE).unwrap();
     File::create(PID_FILE).unwrap();
+    let stderr = File::create(ERR_FILE).unwrap();
 
     let daemonize = Daemonize::new()
         .pid_file(PID_FILE)
@@ -57,6 +74,8 @@ async fn main() {
     chmod_to_non_root(OUT_FILE);
     chmod_to_non_root(ERR_FILE);
     chmod_to_non_root(PID_FILE);
+    chmod_to_non_root(URL_FILE);
+    chmod_to_non_root(POST_FILE);
 
     let recievers: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -86,43 +105,50 @@ async fn main() {
 
     // TODO: Archive und Feddit spawnen
 
+    // Update Thread spawnen
+    let guard = recievers.clone();
+    thread::spawn(move || loop {
+        sleep(settings::UPDATE_FETCH_DELAY);
+        if let Err(err) = update(Some(print), Some(guard.clone())) {
+            eprint(format!("{}", err).as_str(), guard.clone());
+        }
+    });
+
     // Auf reinkommende Befehl hören
     for stream in listener.incoming() {
         let guard = recievers.clone();
+        let posts_guard = posts.clone();
         thread::spawn(move || match stream {
             Err(err) => {
                 eprint(
                     &format!("Fehlerhafte Verbindung empfangen: {}", err),
-                    &*guard.lock().unwrap(),
+                    guard.clone(),
                 );
                 return;
             }
             Ok(mut stream) => {
                 print(
                     &format!("Empfange Verbindung mit {}...", stream.peer_addr().unwrap()),
-                    &*guard.lock().unwrap(),
+                    guard.clone(),
                 );
+
                 let message = read_from_stream(&mut stream);
 
-                print(
-                    &format!("Nachricht: \"{}\"", message),
-                    &*guard.lock().unwrap(),
-                );
+                print(&format!("Nachricht: \"{}\"", message), guard.clone());
 
                 match message.as_str() {
                     "ping" => {
-                        print("Schreibe 'pong' in den stream", &*guard.lock().unwrap());
+                        print("Schreibe 'pong' in den stream", guard);
                         stream.write_all(b"pong").unwrap();
                     }
                     "stop" => {
-                        print("Stoppe den Daemon.", &*guard.lock().unwrap());
-                        shutdown_preperations(&*guard.lock().unwrap());
+                        print("Stoppe den Daemon.", guard.clone());
+                        shutdown_preperations(&*guard.lock().unwrap(), url, posts_guard);
                         stream.write_all(b"ok").unwrap();
                         println!("Exite.");
                         exit(0);
                     }
                     "listen" => {
-                        // TODO: implementieren
                         stream
                             .write_all(b"Achtung: Aktuell noch extrem unstable!")
                             .unwrap();
@@ -139,19 +165,52 @@ async fn main() {
     }
 }
 
-fn print(message: &str, streams: &Vec<TcpStream>) {
+fn print(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
     println!("{}", message);
-    for mut stream in streams {
-        stream.write(message.as_bytes()).unwrap();
+
+    let mut streams_override_idxs = Vec::new();
+
+    for (index, mut stream) in unwrap_mutex_save!(streams).iter().enumerate() {
+        if let Err(err) = stream.write(message.as_bytes()) {
+            eprintln!("Fehler beim Schreiben in einen Stream: {}", err);
+        } else {
+            streams_override_idxs.push(index);
+        }
     }
+
+    let new: Vec<TcpStream> = unwrap_mutex_save!(streams)
+        .drain(..)
+        .enumerate()
+        .filter(|(idx, _)| streams_override_idxs.contains(idx))
+        .map(|(_, stream)| stream)
+        .collect();
+    unwrap_mutex_save!(streams) = new;
+
     sleep(Duration::from_millis(1));
 }
 
-fn eprint(message: &str, streams: &Vec<TcpStream>) {
+fn eprint(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
     eprintln!("{}", message);
-    for mut stream in streams {
-        stream.write(message.as_bytes()).unwrap();
+
+    let mut streams_override_idxs = Vec::new();
+
+    for (index, mut stream) in unwrap_mutex_save!(streams).iter().enumerate() {
+        if let Err(err) = stream.write(message.as_bytes()) {
+            eprintln!("Fehler beim Schreiben in einen Stream: {}", err);
+        } else {
+            streams_override_idxs.push(index);
+        }
     }
+
+    let new: Vec<TcpStream> = unwrap_mutex_save!(streams)
+        .drain(..)
+        .enumerate()
+        .filter(|(idx, _)| streams_override_idxs.contains(idx))
+        .map(|(_, stream)| stream)
+        .collect();
+    unwrap_mutex_save!(streams) = new;
+
+    sleep(Duration::from_millis(1));
 }
 
 /// Ändert die Berechtigungen einer Datei zu read-write für alle Nutzer
@@ -162,9 +221,28 @@ fn chmod_to_non_root(filepath: &str) {
 }
 
 /// Wird ausgeführt nachdem stop empfangen wurde
-fn shutdown_preperations(streams: &Vec<TcpStream>) {
+fn shutdown_preperations(streams: &Vec<TcpStream>, url: &str, posts: Arc<Mutex<Vec<i32>>>) {
     for mut stream in streams {
         stream.write(b"Tschau :)").unwrap();
         stream.shutdown(std::net::Shutdown::Both).unwrap();
     }
+
+    if let Err(err) = save(url, unwrap_mutex_save!(posts).to_vec()) {
+        println!("Fehler beim Speichern: {}", err);
+    }
+}
+
+/// Speichert den aktuellen Fortschritt
+fn save(url: &str, posts: Vec<i32>) -> Result<(), std::io::Error> {
+    let mut url_file = File::create(settings::URL_FILE)?;
+    let post_file = File::create(settings::POST_FILE)?;
+
+    url_file.write_all(url.as_bytes())?;
+
+    let mut writer = BufWriter::new(post_file);
+    for post in posts {
+        writer.write_all(post.to_string().as_bytes())?;
+    }
+
+    Ok(())
 }
