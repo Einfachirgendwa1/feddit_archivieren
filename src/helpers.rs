@@ -1,9 +1,10 @@
 use std::{
-    fs::File,
+    fs::{read_dir, read_to_string, File},
     io::{BufRead, BufReader, Read},
     net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
+    sync::{Arc, Mutex},
 };
 
 use crate::settings::{self, PID_FILE};
@@ -127,4 +128,163 @@ pub fn read_from_stream(stream: &mut TcpStream) -> String {
 pub fn to_rust_string(buf: &[u8; settings::TCP_BUFFER_SIZE]) -> String {
     let string = String::from_utf8_lossy(buf);
     string.trim_end_matches('\0').into()
+}
+
+fn get_update_version() -> String {
+    let content = read_to_string(format!("{}/Cargo.toml", settings::UDPATE_DIR)).unwrap();
+    let toml: toml::Value = content.parse().unwrap();
+    toml.get("package")
+        .and_then(|package| package.get("version"))
+        .and_then(|version| version.as_str())
+        .unwrap()
+        .to_string()
+}
+
+fn get_current_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Updatet das Programm
+pub fn update(
+    print_override: Option<fn(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>)>,
+    print_args: Option<Arc<Mutex<Vec<TcpStream>>>>,
+) -> Result<(), String> {
+    macro_rules! print_maybe_override {
+        ($e:expr) => {
+            if print_override.is_some() {
+                print_override.unwrap()($e, print_args.clone().unwrap())
+            } else {
+                println!("{}", $e);
+            }
+        };
+    }
+
+    if !Path::new(settings::UDPATE_DIR).exists()
+        || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
+    {
+        // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
+        print_maybe_override!(format!(
+            "Klone {} nach {}...",
+            settings::GITHUB_LINK,
+            settings::UDPATE_DIR
+        )
+        .as_str());
+
+        match Command::new("git")
+            .arg("clone")
+            .arg(settings::GITHUB_LINK)
+            .arg(settings::UDPATE_DIR)
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    return Err(format!(
+                        "Fehler beim Klonen von {} nach {}:\n{}",
+                        settings::GITHUB_LINK,
+                        settings::UDPATE_DIR,
+                        command_output_formater(&output)
+                    ));
+                }
+            }
+
+            Err(err) => {
+                return Err(format!(
+                    "Fehler beim Klonen von {} nach {}: {}",
+                    settings::GITHUB_LINK,
+                    settings::UDPATE_DIR,
+                    err
+                ));
+            }
+        }
+    } else {
+        // Das Directory existiert schon, daher pullen wir einfach den neuen Code
+        print_maybe_override!("Altes Update Directory gefunden! Pulle den neuen Code...");
+        print_maybe_override!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
+        match Command::new("git")
+            .arg("reset")
+            .arg("--hard")
+            .arg("HEAD")
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    return Err(format!(
+                        "Fehler beim Resetten der Lokalen changes in {}: {}",
+                        settings::UDPATE_DIR,
+                        command_output_formater(&output)
+                    ));
+                }
+                command_output_formater(&output);
+            }
+            Err(err) => {
+                return Err(format!(
+                    "Fehler beim Resetten der Lokalen changes in {}: {}",
+                    settings::UDPATE_DIR,
+                    err
+                ));
+            }
+        }
+        match Command::new("git")
+            .current_dir(settings::UDPATE_DIR)
+            .arg("pull")
+            .arg("--force")
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
+                    let mut message = String::from("Fehler beim Pullen des neuen Codes: ");
+                    message.push_str(command_output_formater(&output).as_str());
+                    return Err(message);
+                }
+            }
+            Err(message) => {
+                return Err(message.to_string());
+            }
+        }
+    }
+
+    print_maybe_override!("Fertig!");
+
+    if get_current_version() == get_update_version() {
+        print_maybe_override!(
+            format!("Bereits die neuste Version ({}).", get_current_version()).as_str()
+        );
+        return Ok(());
+    }
+
+    print_maybe_override!(format!(
+        "Neue Version gefunden: {} -> {}",
+        get_current_version(),
+        get_update_version()
+    )
+    .as_str());
+    print_maybe_override!("Compile den Source Code...");
+
+    // Den Code mithilfe des Makefiles compilen und installieren
+    match Command::new("make")
+        .current_dir(settings::UDPATE_DIR)
+        .arg("install")
+        .output()
+    {
+        Ok(output) => {
+            if !output.status.success() {
+                return Err(format!(
+                    "Fehler bei der Installation.\n{}",
+                    command_output_formater(&output)
+                ));
+            }
+        }
+        Err(err) => {
+            return Err(format!("Fehler bei der Installation: {}", err));
+        }
+    }
+
+    print_maybe_override!("Fertig!");
+    print_maybe_override!(format!(
+        "Die neuste Version ({}) ist jetzt installiert.",
+        get_update_version()
+    )
+    .as_str());
+    print_maybe_override!("Update erfolgreich abgeschlossen.");
+    Ok(())
 }
