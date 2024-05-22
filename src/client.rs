@@ -391,10 +391,6 @@ fn start_daemon() {
     }
 }
 
-/// Funktion die vom Archive-Thread ausgeführt wird
-#[allow(dead_code)]
-fn archive() {}
-
 /// Löscht RUN_DIR und UPDATE_DIR
 fn clean() -> i32 {
     let mut exit_code = 0;
