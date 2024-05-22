@@ -10,7 +10,7 @@ use std::{
 
 use helpers::{
     chmod, command_output_formater, daemon_running, feddit_archivieren_assert, get,
-    read_from_stream, read_pid_file, root, run_command,
+    read_from_stream, read_pid_file, root, run_command, update,
 };
 
 mod helpers;
@@ -30,6 +30,7 @@ enum Commands {
     Checkhealth,
     Stop,
     Listen,
+    Uninstall,
 }
 
 #[derive(Parser)]
@@ -65,6 +66,19 @@ fn main() {
             // Die neuen an die richtige Stelle kopieren
             copy_file("target/debug/daemon", settings::DAEMON_PATH);
             copy_file("target/debug/client", settings::CLIENT_PATH);
+
+            // Das Update und Run-Verzeichnis erstellen
+            create_run_dir();
+
+            if !Path::new(settings::UDPATE_DIR).exists() {
+                if let Err(err) = create_dir(settings::UDPATE_DIR) {
+                    eprintln!(
+                        "Fehler beim Erstellen von {}: {}",
+                        settings::UDPATE_DIR,
+                        err
+                    );
+                }
+            }
 
             // Jedem Benutzer read-write-execute Rechte für die Dateien geben, wenn möglich
             if root() {
@@ -103,12 +117,10 @@ fn main() {
             }
 
             // Die Update Funktion rufen, auf das Ergebnis reagieren
-            if let Err(message) = update() {
+            if let Err(message) = update(None, None) {
                 eprintln!("Fehler beim Updaten: ");
                 eprintln!("{}", message);
                 exit(1);
-            } else {
-                println!("Update erfolgreich abgeschlossen.");
             }
 
             exit(0);
@@ -141,25 +153,7 @@ fn main() {
             exit(0);
         }
         Commands::Clean => {
-            let mut exit_code = 0;
-            // Löscht RUN_DIR und UPDATE_DIR
-            if Path::new(settings::RUN_DIR).exists() {
-                if let Err(error) = remove_dir_all(settings::RUN_DIR) {
-                    eprintln!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
-                    exit_code = 1;
-                }
-            }
-            if Path::new(settings::UDPATE_DIR).exists() {
-                if let Err(error) = remove_dir_all(settings::UDPATE_DIR) {
-                    eprintln!(
-                        "Fehler beim Löschen von {}: {}",
-                        settings::UDPATE_DIR,
-                        error
-                    );
-                    exit_code = 1;
-                }
-            }
-            exit(exit_code);
+            exit(clean());
         }
         Commands::Info => {
             if !daemon_running() {
@@ -280,6 +274,15 @@ fn main() {
                 println!("{}", response);
             }
         }
+        Commands::Uninstall => {
+            clean();
+            if let Err(err) = remove_file(settings::CLIENT_PATH) {
+                eprintln!("Fehler beim Löschen von {}: {}", settings::CLIENT_PATH, err);
+            }
+            if let Err(err) = remove_file(settings::DAEMON_PATH) {
+                eprintln!("Fehler beim Löschen von {}: {}", settings::DAEMON_PATH, err);
+            }
+        }
     }
 }
 
@@ -366,85 +369,6 @@ fn send_to_daemon(message: &str) -> TcpStream {
     stream
 }
 
-/// Updatet das Programm
-fn update() -> Result<(), String> {
-    if !Path::new(settings::UDPATE_DIR).exists() {
-        // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
-        match Command::new("git")
-            .arg("clone")
-            .arg(settings::GITHUB_LINK)
-            .arg(settings::UDPATE_DIR)
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    return Err(format!(
-                        "Fehler beim Klonen von {} nach {}:\n{}",
-                        settings::GITHUB_LINK,
-                        settings::UDPATE_DIR,
-                        command_output_formater(&output)
-                    ));
-                }
-            }
-
-            Err(err) => {
-                return Err(format!(
-                    "Fehler beim Klonen von {} nach {}: {}",
-                    settings::GITHUB_LINK,
-                    settings::UDPATE_DIR,
-                    err
-                ));
-            }
-        }
-    } else {
-        // Das Directory existiert schon, daher pullen wir einfach den neuen Code
-        println!("Altes Update Directory gefunden! Pulle den neuen Code...");
-        println!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
-        match Command::new("git")
-            .current_dir(settings::UDPATE_DIR)
-            .arg("pull")
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    let mut message = String::from("Fehler beim Pullen des neuen Codes: ");
-                    message.push_str(command_output_formater(&output).as_str());
-                    return Err(message);
-                }
-            }
-            Err(message) => {
-                return Err(message.to_string());
-            }
-        }
-    }
-
-    println!("Fertig!");
-    println!("Compile den Source Code...");
-
-    // Den Code mithilfe des Makefiles compilen und installieren
-    match Command::new("make")
-        .current_dir(settings::UDPATE_DIR)
-        .arg("install")
-        .output()
-    {
-        Ok(output) => {
-            if !output.status.success() {
-                return Err(format!(
-                    "Fehler bei der Installation.\n{}",
-                    command_output_formater(&output)
-                ));
-            }
-        }
-        Err(err) => {
-            return Err(format!("Fehler bei der Installation: {}", err));
-        }
-    }
-
-    println!("Fertig!");
-    println!("Die neuste Version ist jetzt installiert.");
-    Ok(())
-}
-
 fn start_daemon() {
     // Das Run-Verzeichnis für den Daemon erstellen
     create_run_dir();
@@ -470,3 +394,30 @@ fn start_daemon() {
 /// Funktion die vom Feddit-Thread ausgeführt wird
 #[allow(dead_code)]
 fn feddit() {}
+
+/// Löscht RUN_DIR und UPDATE_DIR
+fn clean() -> i32 {
+    let mut exit_code = 0;
+
+    if daemon_running() {
+        kill_daemon();
+    }
+
+    if Path::new(settings::RUN_DIR).exists() {
+        if let Err(error) = remove_dir_all(settings::RUN_DIR) {
+            eprintln!("Fehler beim Löschen von {}: {}", settings::RUN_DIR, error);
+            exit_code = 1;
+        }
+    }
+    if Path::new(settings::UDPATE_DIR).exists() {
+        if let Err(error) = remove_dir_all(settings::UDPATE_DIR) {
+            eprintln!(
+                "Fehler beim Löschen von {}: {}",
+                settings::UDPATE_DIR,
+                error
+            );
+            exit_code = 1;
+        }
+    }
+    exit_code
+}

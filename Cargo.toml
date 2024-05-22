@@ -1,6 +1,6 @@
 [package]
 name = "feddit_archivieren"
-version = "0.1.0"
+version = "0.0.30"
 edition = "2021"
 
 [[bin]]
@@ -19,3 +19,4 @@ chrono = "0.4.38"
 reqwest = "0.12.4"
 tokio = { version = "1.37.0", features = ["full"] }
 clap = { version = "4.5.4", features = ["derive"] }
+toml = "0.8.13"
