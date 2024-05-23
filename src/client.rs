@@ -18,19 +18,32 @@ mod settings;
 
 #[derive(Subcommand)]
 enum Commands {
-    Install,
+    /// Startet den Daemon
     Start,
+    /// Killt den Daemon (ohne zu Daten zu sichern)
     Kill,
-    KillMaybe,
+    /// Updated das Programm auf die neuste Version
     Update,
-    UpdateLocal,
+    /// Löscht alle Dateien vom Programm, bis auf die binarys
     Clean,
+    /// Zeigt Informationen über den Daemon an
     Info,
-    LogsStatic,
+    /// Überprüft den Gesundheitszustand des Daemons
     Checkhealth,
+    /// Stoppt den Daemon (sichere Version von kill)
     Stop,
+    /// Printet Live was der Daemon ausgibt
     Listen,
+    /// Deinstalliert das Programm (ruft auch Clean)
     Uninstall,
+    /// (DEBUG) Installiert das Programm
+    Install,
+    /// (DEBUG) Updated das Programm mit den Dateien im aktuellen Verzeichnis
+    UpdateLocal,
+    /// (DEBUG) Killt den Daemon wenn er läuft
+    KillMaybe,
+    /// (DEBUG) Zeigt die Logs des Daemons an
+    LogsStatic,
 }
 
 #[derive(Parser)]
@@ -40,6 +53,7 @@ struct Cli {
     #[command(subcommand)]
     subcommand: Commands,
 
+    /// Erzwingt die gegebene Aktion (genaues Verhalten variiert)
     #[arg(short, long, action = ArgAction::SetTrue, global = true)]
     force: bool,
 }
