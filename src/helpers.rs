@@ -172,6 +172,7 @@ pub fn update(
 
         match Command::new("git")
             .arg("clone")
+            .current_dir(settings::UDPATE_DIR)
             .arg(settings::GITHUB_LINK)
             .arg(settings::UDPATE_DIR)
             .output()
@@ -201,6 +202,7 @@ pub fn update(
         print_maybe_override!("Altes Update Directory gefunden! Pulle den neuen Code...");
         print_maybe_override!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
         match Command::new("git")
+            .current_dir(settings::UDPATE_DIR)
             .arg("reset")
             .arg("--hard")
             .arg("HEAD")
