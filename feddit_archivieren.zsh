@@ -1,4 +1,18 @@
 #compdef feddit_archivieren
 local -a subcmds
-subcmds=('start:Startet den Daemon' 'install:Installiert das Programm' 'kill:Killt den Daemon' 'update:Updated den Daemon' 'update_local:Updated den Daemon anhand des aktuellen Directorys' 'clean:Löscht alle vom Programm erstellten Dateien, außer das Programm selbst' 'info:Zeigt Informationen über den Daemon an' 'logs_static:Zeigt die aktuellen Logs von dem Daemon an' 'checkhealth:Überprüft den "Gesundheitsstatus" des Daemons' 'kill_maybe:Killt den Daemon wenn er läuft' 'listen:Zeigt die Ganzen Logs vom Daemon an, aktualisiert aber die ganze Zeit' 'stop:Stoppt den Daemon (sicher Version von kill)')
+subcmds=(
+  'start:Startet den Daemon'
+  'kill:Killt den Daemon (ohne zu Daten zu sichern)'
+  'update:Updated das Programm auf die neuste Version'
+  'clean:Löscht alle Dateien vom Programm, bis auf die binarys'
+  'info:Zeigt Informationen über den Daemon an'
+  'checkhealth:Überprüft den Gesundheitszustand des Daemons'
+  'stop:Stoppt den Daemon (sichere Version von kill)'
+  'listen:Printet Live was der Daemon ausgibt'
+  'uninstall:Deinstalliert das Programm (ruft auch Clean)'
+  'install:(DEBUG) Installiert das Programm'
+  'update-local:(DEBUG) Updated das Programm mit den Dateien im aktuellen Verzeichnis'
+  'kill-maybe:(DEBUG) Killt den Daemon wenn er läuft'
+  'logs-static:(DEBUG) Zeigt die Logs des Daemons an'
+)
 _describe 'command' subcmds
