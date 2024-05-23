@@ -221,7 +221,7 @@ pub fn update(
             Ok(output) => {
                 if !output.status.success() {
                     return Err(format!(
-                        "Fehler beim Resetten der Lokalen changes in {}: {}",
+                        "Fehler beim Resetten der Lokalen changes in {}: {}. Probier mal feddit_archivieren clean, dass sollte das Problem beheben.",
                         settings::UDPATE_DIR,
                         command_output_formater(&output)
                     ));
@@ -230,7 +230,7 @@ pub fn update(
             }
             Err(err) => {
                 return Err(format!(
-                    "Fehler beim Resetten der Lokalen changes in {}: {}",
+                    "Fehler beim Resetten der Lokalen changes in {}: {}. Probier mal feddit_archivieren clean, dass sollte das Problem beheben.",
                     settings::UDPATE_DIR,
                     err
                 ));
@@ -246,6 +246,7 @@ pub fn update(
                 if !output.status.success() {
                     let mut message = String::from("Fehler beim Pullen des neuen Codes: ");
                     message.push_str(command_output_formater(&output).as_str());
+                    message.push_str("\nProbier mal feddit_archivieren clean.");
                     return Err(message);
                 }
             }
