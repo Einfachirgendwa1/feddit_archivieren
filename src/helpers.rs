@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{
     fs::{read_dir, read_to_string, File},
     io::{BufRead, BufReader, Read},
@@ -9,9 +11,19 @@ use std::{
 
 use crate::settings::{self, PID_FILE};
 
+/// Wartet maximal `Duration` darauf, dass `Bedingung` true wird, returnt `true` wenn Bedingung vor
+/// Ablauf der Zeit `true` wurde.
+#[macro_export]
+macro_rules! wait_with_timeout {
+    ($closure:expr, $timeout:expr) => {{
+        let start = std::time::Instant::now();
+        while !$closure() && start.elapsed() < $timeout {}
+        $closure()
+    }};
+}
+
 /// Überprüft die Bedingung `condition` und wenn sie falsch ergibt printet `message` zu stderr und
 /// exitet mit 1
-#[allow(dead_code)]
 pub fn feddit_archivieren_assert(condition: bool, message: &str) {
     if !condition {
         eprintln!("{}", message);
@@ -25,7 +37,6 @@ pub fn pid_file_exists() -> bool {
 }
 
 /// Returnt den Inhalt von PID_FILE, wenn es nicht existiert exitet mit 1
-#[allow(dead_code)]
 pub fn read_pid_file() -> String {
     feddit_archivieren_assert(
         pid_file_exists(),
@@ -98,7 +109,6 @@ pub fn command_output_formater(output: &Output) -> String {
 }
 
 /// Liest eine Zeile aus einer Datei. Returnt eine Fehlermeldung wenn etwas schiefläuft.
-#[allow(dead_code)]
 pub fn get(filepath: &str) -> String {
     match File::open(filepath) {
         Ok(file) => {

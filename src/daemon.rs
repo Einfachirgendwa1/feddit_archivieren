@@ -9,7 +9,6 @@ use std::{
     thread::{self, sleep},
     time::Duration,
 };
-
 mod helpers;
 mod settings;
 
@@ -103,7 +102,12 @@ fn main() {
 
     println!("Socketadresse in eine Datei geschrieben.");
 
-    // TODO: Archive und Feddit spawnen
+    let running = Arc::new(Mutex::new(true));
+
+    let guard = running.clone();
+    let archive = Arc::new(Mutex::new(thread::spawn(|| archive(guard))));
+    let guard = running.clone();
+    let feddit = Arc::new(Mutex::new(thread::spawn(|| feddit(guard))));
 
     // Update Thread spawnen
     let guard = recievers.clone();
@@ -118,6 +122,9 @@ fn main() {
     for stream in listener.incoming() {
         let guard = recievers.clone();
         let posts_guard = posts.clone();
+        let running_guard = running.clone();
+        let feddit_guard = feddit.clone();
+        let archive_guard = archive.clone();
         thread::spawn(move || match stream {
             Err(err) => {
                 eprint(
@@ -143,7 +150,13 @@ fn main() {
                     }
                     "stop" => {
                         print("Stoppe den Daemon.", guard.clone());
+                        unwrap_mutex_save!(running_guard) = false;
                         shutdown_preperations(&*guard.lock().unwrap(), url, posts_guard);
+                        wait_with_timeout!(
+                            || unwrap_mutex_save!(feddit_guard).is_finished().clone()
+                                && unwrap_mutex_save!(archive_guard).is_finished().clone(),
+                            Duration::from_secs(1)
+                        );
                         stream.write_all(b"ok").unwrap();
                         println!("Exite.");
                         exit(0);
@@ -248,5 +261,15 @@ fn save(url: &str, posts: Vec<i32>) -> Result<(), std::io::Error> {
 }
 
 /// Funktion die vom Archive-Thread ausgeführt wird
-#[allow(dead_code)]
-fn archive() {}
+fn archive(running: Arc<Mutex<bool>>) {
+    loop {
+        if unwrap_mutex_save!(running) == false {
+            return;
+        }
+    }
+}
+
+/// Funktion die vom Feddit-Thread ausgeführt wird
+fn feddit(running: Arc<Mutex<bool>>) {
+    todo!()
+}
