@@ -5,7 +5,7 @@ use std::{
     net::TcpStream,
     path::Path,
     process::{exit, Command},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use helpers::{
@@ -246,11 +246,10 @@ fn main() {
             );
 
             // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
-            let start = Instant::now();
-            while daemon_running() && start.elapsed() < Duration::from_secs(1) {}
+            let daemon_stopped = wait_with_timeout!(daemon_running, Duration::from_secs(1));
 
             feddit_archivieren_assert(
-                !daemon_running(),
+                daemon_stopped,
                 "Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.",
             );
 
