@@ -271,5 +271,9 @@ fn archive(running: Arc<Mutex<bool>>) {
 
 /// Funktion die vom Feddit-Thread ausgeführt wird
 fn feddit(running: Arc<Mutex<bool>>) {
-    todo!()
+    loop {
+        if unwrap_mutex_save!(running) == false {
+            return;
+        }
+    }
 }

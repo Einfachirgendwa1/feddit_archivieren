@@ -390,6 +390,10 @@ fn start_daemon() {
     }
 }
 
+/// Funktion die vom Feddit-Thread ausgeführt wird
+#[allow(dead_code)]
+fn feddit() {}
+
 /// Löscht RUN_DIR und UPDATE_DIR
 fn clean() -> i32 {
     let mut exit_code = 0;
