@@ -182,7 +182,6 @@ pub fn update(
 
         match Command::new("git")
             .arg("clone")
-            .current_dir(settings::UDPATE_DIR)
             .arg(settings::GITHUB_LINK)
             .arg(settings::UDPATE_DIR)
             .output()
