@@ -151,6 +151,7 @@ fn main() {
             }
 
             // `make clean install` ausführen
+            println!("Compile den Source Code...");
             match Command::new("make").arg("clean").arg("install").output() {
                 Ok(output) => {
                     if !output.status.success() {
