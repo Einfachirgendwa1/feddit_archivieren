@@ -64,11 +64,13 @@ fn main() {
 
     match args.subcommand {
         Commands::Install => {
+            let mut replace_daemon = false;
             if daemon_running() {
                 if force {
                     kill_daemon();
                 } else {
                     println!("Es läuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    replace_daemon = true;
                     if let Err(err) = restart_daemon() {
                         eprintln!("Fehler beim Stoppen des Daemons: {}", err);
                         exit(1);
@@ -105,6 +107,10 @@ fn main() {
             }
 
             println!("Installation erfolgreich!");
+
+            if replace_daemon {
+                start_daemon();
+            }
         }
         Commands::Start => {
             if daemon_running() {
