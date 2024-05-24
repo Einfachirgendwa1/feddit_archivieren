@@ -144,9 +144,10 @@ fn main() {
                 feddit_archivieren_assert(root(), "Du must root sein.");
             }
 
-            // TODO: Besser Lösung mit "stop" implementieren
             if daemon_running() {
-                kill_daemon();
+                if let Err(err) = stop_daemon() {
+                    eprintln!("Fehler beim Stoppen des Daemons: {}", err);
+                }
             }
 
             // `make clean install` ausführen
