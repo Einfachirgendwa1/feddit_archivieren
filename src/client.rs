@@ -68,8 +68,8 @@ fn main() {
                 if force {
                     kill_daemon();
                 } else {
-                    println!("Es läuft bereits ein Daemon, versuche ihn zu stoppen...");
-                    if let Err(err) = stop_daemon() {
+                    println!("Es läuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    if let Err(err) = restart_daemon() {
                         eprintln!("Fehler beim Stoppen des Daemons: {}", err);
                         exit(1);
                     }
@@ -275,7 +275,31 @@ fn main() {
                     println!("Der Daemon hat die Verbindung geschlossen.");
                     exit(0);
                 }
-                println!("{}", response);
+                if response.to_lowercase().trim() == "restart" {
+                    println!("Der Daemon wird neu gestartet.");
+                    if daemon_running() {
+                        if wait_with_timeout!(|| !daemon_running(), Duration::from_millis(500)) {
+                            println!("Der Daemon wurde gestoppt.");
+                        } else {
+                            println!("Der Daemon wurde innerhalb von 0.5 Sekunden nicht beendet.");
+                            exit(1);
+                        }
+                    }
+
+                    if wait_with_timeout!(|| daemon_running(), Duration::from_secs(5)) {
+                        println!("Der Daemon ist wieder online!");
+                    } else {
+                        println!(
+                            "Der Daemon ist innerhalb von 5 Sekunden nicht wieder online gegangen."
+                        );
+                        exit(1);
+                    }
+
+                    println!("Stelle Verbindung wieder her...");
+                    stream = send_to_daemon("listen");
+                } else {
+                    println!("{}", response);
+                }
             }
         }
         Commands::Uninstall => {
@@ -429,6 +453,27 @@ fn clean() -> i32 {
 /// Stoppt den Daemon sicher
 fn stop_daemon() -> Result<(), String> {
     let mut stream = send_to_daemon("stop");
+    let response = read_from_stream(&mut stream);
+    if !(response == "ok") {
+        return Err(format!(
+            "Der Daemon hat eine unerwartete Antwort gesendet: {}",
+            response
+        ));
+    }
+
+    // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
+    let daemon_stopped = wait_with_timeout!(daemon_running, Duration::from_secs(1));
+
+    if !daemon_stopped {
+        Err("Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+/// Restartet den Daemon
+fn restart_daemon() -> Result<(), String> {
+    let mut stream = send_to_daemon("restart");
     let response = read_from_stream(&mut stream);
     if !(response == "ok") {
         return Err(format!(

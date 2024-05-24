@@ -30,6 +30,23 @@ macro_rules! unwrap_mutex_save {
     }
 }
 
+/// streams, guard, running_guard, url, posts_guard, feddit_guard, archive_guard
+macro_rules! shutdown {
+    ($stream:expr, $guard:expr, $running_guard:expr, $url:expr, $posts_guard:expr, $feddit_guard:expr, $archive_guard:expr) => {
+        print("Stoppe den Daemon.", $guard.clone());
+        unwrap_mutex_save!($running_guard) = false;
+        shutdown_preperations(&*$guard.lock().unwrap(), $url, $posts_guard);
+        wait_with_timeout!(
+            || unwrap_mutex_save!($feddit_guard).is_finished().clone()
+                && unwrap_mutex_save!($archive_guard).is_finished().clone(),
+            Duration::from_secs(1)
+        );
+        $stream.write_all(b"ok").unwrap();
+        println!("Exite.");
+        exit(0);
+    };
+}
+
 fn main() {
     let url = settings::FEDDIT_LINK;
     let posts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
@@ -156,18 +173,28 @@ fn main() {
                         print("Schreibe 'pong' in den stream", guard);
                         stream.write_all(b"pong").unwrap();
                     }
-                    "stop" => {
-                        print("Stoppe den Daemon.", guard.clone());
-                        unwrap_mutex_save!(running_guard) = false;
-                        shutdown_preperations(&*guard.lock().unwrap(), url, posts_guard);
-                        wait_with_timeout!(
-                            || unwrap_mutex_save!(feddit_guard).is_finished().clone()
-                                && unwrap_mutex_save!(archive_guard).is_finished().clone(),
-                            Duration::from_secs(1)
+                    "restart" => {
+                        print("restart", guard.clone());
+                        shutdown!(
+                            stream,
+                            guard,
+                            running_guard,
+                            url,
+                            posts_guard,
+                            feddit_guard,
+                            archive_guard
                         );
-                        stream.write_all(b"ok").unwrap();
-                        println!("Exite.");
-                        exit(0);
+                    }
+                    "stop" => {
+                        shutdown!(
+                            stream,
+                            guard,
+                            running_guard,
+                            url,
+                            posts_guard,
+                            feddit_guard,
+                            archive_guard
+                        );
                     }
                     "listen" => {
                         stream
