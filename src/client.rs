@@ -246,26 +246,11 @@ fn main() {
                 feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
             }
 
-            // Sendet `stop` an den Daemon, erwartet `ok`
-
-            let mut stream = send_to_daemon("stop");
-            let response = read_from_stream(&mut stream);
-            feddit_archivieren_assert(
-                response == "ok",
-                format!(
-                    "Der Daemon hat eine unerwartete Antwort gesendet: {}",
-                    response
-                )
-                .as_str(),
-            );
-
-            // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
-            let daemon_stopped = wait_with_timeout!(daemon_running, Duration::from_secs(1));
-
-            feddit_archivieren_assert(
-                daemon_stopped,
-                "Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.",
-            );
+            // Sendet `stop` an den Daemon, erwartet`ok`
+            if let Err(err) = stop_daemon() {
+                eprintln!("Ein Fehler ist aufgetreten:\n{}", err);
+                exit(1);
+            }
 
             println!("Der Daemon wurde erfolgreich beendet!");
         }
@@ -433,4 +418,25 @@ fn clean() -> i32 {
         }
     }
     exit_code
+}
+
+/// Stoppt den Daemon sicher
+fn stop_daemon() -> Result<(), String> {
+    let mut stream = send_to_daemon("stop");
+    let response = read_from_stream(&mut stream);
+    if !(response == "ok") {
+        return Err(format!(
+            "Der Daemon hat eine unerwartete Antwort gesendet: {}",
+            response
+        ));
+    }
+
+    // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
+    let daemon_stopped = wait_with_timeout!(daemon_running, Duration::from_secs(1));
+
+    if !daemon_stopped {
+        Err("Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.".to_string())
+    } else {
+        Ok(())
+    }
 }
