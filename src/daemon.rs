@@ -112,7 +112,15 @@ fn main() {
     // Update Thread spawnen
     let guard = recievers.clone();
     thread::spawn(move || loop {
+        print(
+            &format!(
+                "Warte {} Sekunden vor der nächsten Updateüberprüfung...",
+                settings::UPDATE_FETCH_DELAY.as_secs()
+            ),
+            guard.clone(),
+        );
         sleep(settings::UPDATE_FETCH_DELAY);
+        print("Update...", guard.clone());
         if let Err(err) = update(Some(print), Some(guard.clone())) {
             eprint(format!("{}", err).as_str(), guard.clone());
         }
