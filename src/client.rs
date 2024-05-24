@@ -68,8 +68,12 @@ fn main() {
                 if force {
                     kill_daemon();
                 } else {
-                    eprintln!("Es läuft aktuell schon ein Daemon!");
-                    exit(1);
+                    println!("Es läuft bereits ein Daemon, versuche ihn zu stoppen...");
+                    if let Err(err) = stop_daemon() {
+                        eprintln!("Fehler beim Stoppen des Daemons: {}", err);
+                        exit(1);
+                    }
+                    println!("Gestoppt!");
                 }
             }
 
