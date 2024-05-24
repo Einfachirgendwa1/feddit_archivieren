@@ -10,6 +10,7 @@ pub const URL_FILE: &'static str = "/run/feddit_archivieren/url.txt";
 pub const POST_FILE: &'static str = "/run/feddit_archivieren/posts.txt";
 pub const SOCKET_FILE: &'static str = "/run/feddit_archivieren/daemon.sck";
 pub const UDPATE_DIR: &'static str = "/var/tmp/feddit_archivieren";
+pub const UDPATE_CACHE_DIR: &'static str = "/var/tmp/feddit_archivieren_cache";
 pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddit_archivieren";
 pub const FEDDIT_LINK: &'static str =
     "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";

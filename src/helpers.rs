@@ -1,13 +1,15 @@
 #![allow(dead_code)]
 
 use std::{
-    fs::{read_dir, read_to_string, File},
+    fs::{read_to_string, remove_dir_all, rename, File},
     io::{BufRead, BufReader, Read},
     net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
     sync::{Arc, Mutex},
 };
+
+use git2::Repository;
 
 use crate::settings::{self, PID_FILE};
 
@@ -169,89 +171,79 @@ pub fn update(
         };
     }
 
-    if !Path::new(settings::UDPATE_DIR).exists()
-        || read_dir(settings::UDPATE_DIR).unwrap().next().is_none()
-    {
-        // Wenn das Verzeichnis noch nicht existiert, den Code dahinklonen
-        print_maybe_override!(format!(
-            "Klone {} nach {}...",
-            settings::GITHUB_LINK,
-            settings::UDPATE_DIR
-        )
-        .as_str());
+    let old_dir = Path::new(settings::UDPATE_DIR);
+    let build_cache = old_dir.join("target");
+    let mut build_cache_exists = build_cache.exists();
 
-        match Command::new("git")
-            .arg("clone")
-            .arg(settings::GITHUB_LINK)
-            .arg(settings::UDPATE_DIR)
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    return Err(format!(
-                        "Fehler beim Klonen von {} nach {}:\n{}",
-                        settings::GITHUB_LINK,
-                        settings::UDPATE_DIR,
-                        command_output_formater(&output)
-                    ));
-                }
-            }
-
-            Err(err) => {
-                return Err(format!(
-                    "Fehler beim Klonen von {} nach {}: {}",
-                    settings::GITHUB_LINK,
-                    settings::UDPATE_DIR,
+    if build_cache_exists {
+        if Path::new(settings::UDPATE_CACHE_DIR).exists() {
+            print_maybe_override!(&format!("Lösche {}...", settings::UDPATE_CACHE_DIR));
+            if let Err(err) = remove_dir_all(settings::UDPATE_CACHE_DIR) {
+                print_maybe_override!(&format!(
+                    "Fehler beim Löschen von {}: {}",
+                    settings::UDPATE_CACHE_DIR,
                     err
-                ));
+                ))
             }
         }
-    } else {
-        // Das Directory existiert schon, daher pullen wir einfach den neuen Code
-        print_maybe_override!("Altes Update Directory gefunden! Pulle den neuen Code...");
-        print_maybe_override!("Info: Dadurch, das das alte Directory noch existiert sollte das Compilen nicht allzu lange dauern.");
-        match Command::new("git")
-            .current_dir(settings::UDPATE_DIR)
-            .arg("reset")
-            .arg("--hard")
-            .arg("HEAD")
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    return Err(format!(
-                        "Fehler beim Resetten der Lokalen changes in {}: {}. Probier mal feddit_archivieren clean, dass sollte das Problem beheben.",
-                        settings::UDPATE_DIR,
-                        command_output_formater(&output)
-                    ));
-                }
-                command_output_formater(&output);
-            }
-            Err(err) => {
-                return Err(format!(
-                    "Fehler beim Resetten der Lokalen changes in {}: {}. Probier mal feddit_archivieren clean, dass sollte das Problem beheben.",
-                    settings::UDPATE_DIR,
-                    err
-                ));
-            }
+
+        print_maybe_override!(&format!(
+            "Bewege {:?} nach \"{}\"...",
+            build_cache,
+            settings::UDPATE_CACHE_DIR
+        ));
+
+        if let Err(err) = rename(&build_cache, settings::UDPATE_CACHE_DIR) {
+            print_maybe_override!(&format!(
+                "Fehler beim Bewegen des Caches von {:?} zu {}: {}.",
+                build_cache,
+                settings::UDPATE_CACHE_DIR,
+                err
+            ));
+
+            print_maybe_override!("Ignoriere den Build Cache.");
+            build_cache_exists = false;
         }
-        match Command::new("git")
-            .current_dir(settings::UDPATE_DIR)
-            .arg("pull")
-            .arg("--force")
-            .output()
-        {
-            Ok(output) => {
-                if !output.status.success() {
-                    let mut message = String::from("Fehler beim Pullen des neuen Codes: ");
-                    message.push_str(command_output_formater(&output).as_str());
-                    message.push_str("\nProbier mal feddit_archivieren clean.");
-                    return Err(message);
-                }
-            }
-            Err(message) => {
-                return Err(message.to_string());
-            }
+    }
+
+    if old_dir.exists() {
+        print_maybe_override!(&format!("Lösche {}...", settings::UDPATE_DIR));
+
+        if let Err(err) = remove_dir_all(settings::UDPATE_DIR) {
+            return Err(format!(
+                "Fehler beim Löschen von {}: {}",
+                settings::UDPATE_DIR,
+                err
+            ));
+        }
+    }
+
+    print_maybe_override!(&format!(
+        "Klone {} nach {}...",
+        settings::GITHUB_LINK,
+        settings::UDPATE_DIR
+    ));
+
+    if let Err(err) = Repository::clone(settings::GITHUB_LINK, settings::UDPATE_DIR) {
+        return Err(format!("Fehler beim Klonen: {}", err));
+    }
+
+    if build_cache_exists {
+        print_maybe_override!(&format!(
+            "Bewege \"{}\" nach {:?}...",
+            settings::UDPATE_CACHE_DIR,
+            build_cache,
+        ));
+
+        if let Err(err) = rename(settings::UDPATE_CACHE_DIR, &build_cache) {
+            print_maybe_override!(&format!(
+                "Fehler beim Bewegen des Caches von {} zu {:?}: {}.",
+                settings::UDPATE_CACHE_DIR,
+                build_cache,
+                err
+            ));
+
+            print_maybe_override!("Ignoriere den Build Cache.");
         }
     }
 
