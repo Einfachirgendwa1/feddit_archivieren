@@ -417,7 +417,11 @@ fn start_daemon() {
                 exit(1);
             }
 
-            println!("Daemon erfolgreich gestartet!");
+            if wait_with_timeout!(|| daemon_running(), Duration::from_secs(1)) {
+                println!("Daemon erfolgreich gestartet!");
+            } else {
+                println!("Der Daemon ist nicht online gegangen.");
+            }
         }
         Err(err) => {
             eprintln!("Fehler beim Starten des Daemons: {}", err);
