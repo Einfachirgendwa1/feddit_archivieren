@@ -67,6 +67,7 @@ fn main() {
             let mut replace_daemon = false;
             if daemon_running() {
                 if force {
+                    println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
                     println!("Es läuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");

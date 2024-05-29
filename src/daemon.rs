@@ -175,6 +175,7 @@ fn main() {
                     }
                     "restart" => {
                         print("restart", guard.clone());
+                        stream.write_all(b"ok").unwrap();
                         shutdown!(
                             stream,
                             guard,
