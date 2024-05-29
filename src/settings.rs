@@ -7,6 +7,7 @@ pub const PID_FILE: &'static str = "/run/feddit_archivieren/daemon.pid";
 pub const ERR_FILE: &'static str = "/run/feddit_archivieren/daemon.err";
 pub const OUT_FILE: &'static str = "/run/feddit_archivieren/daemon.out";
 pub const URL_FILE: &'static str = "/run/feddit_archivieren/url.txt";
+pub const UPDATE_LOG_FILE: &'static str = "/run/feddit_archivieren/update_log.txt";
 pub const POST_FILE: &'static str = "/run/feddit_archivieren/posts.txt";
 pub const SOCKET_FILE: &'static str = "/run/feddit_archivieren/daemon.sck";
 pub const UDPATE_DIR: &'static str = "/var/tmp/feddit_archivieren";

@@ -1,7 +1,7 @@
 use clap::{ArgAction, Parser, Subcommand};
 use std::{
     fs::{create_dir, remove_dir_all, remove_file, File},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     net::TcpStream,
     path::Path,
     process::{exit, Command},
@@ -70,13 +70,22 @@ fn main() {
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
-                    println!("Es läuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    let print = |msg: &str| match File::create(settings::UPDATE_LOG_FILE) {
+                        Ok(mut file) => {
+                            if let Err(err) = file.write_all(msg.as_bytes()) {
+                                eprintln!("{}", err);
+                            }
+                        }
+                        Err(err) => eprintln!("{}", err),
+                    };
+
+                    print("Es läuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
-                        eprintln!("Fehler beim Stoppen des Daemons: {}", err);
+                        print(&format!("Fehler beim Stoppen des Daemons: {}", err));
                         exit(1);
                     }
-                    println!("Gestoppt!");
+                    print("Gestoppt!");
                 }
             }
 
