@@ -65,7 +65,7 @@ fn print_to_update_log(msg: &str) {
         File::options().append(true).open(settings::UPDATE_LOG_FILE)
     } {
         Ok(mut file) => {
-            if let Err(err) = file.write_all(msg.as_bytes()) {
+            if let Err(err) = file.write_all(&format!("{}\n", msg).as_bytes()) {
                 println!("{}", err);
             }
         }

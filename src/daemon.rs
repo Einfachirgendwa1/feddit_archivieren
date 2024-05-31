@@ -13,7 +13,7 @@ mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream, update},
+    helpers::{chmod, daemon_running, read_from_stream, update},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, POST_FILE, SOCKET_FILE, URL_FILE},
 };
 
@@ -52,15 +52,11 @@ fn main() {
     let posts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Überprüfen ob bereits ein Daemon läuft
-    if pid_file_exists() {
-        println!("PID Datei existiert.");
-        if daemon_running() {
-            println!(
-                "Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden."
-            );
-            println!("Starte mit --force um das Starten zu erzwingen.");
-            exit(1);
-        }
+    if daemon_running() {
+        println!("Es läuft bereits ein Daemon!");
+        println!("Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden.");
+        println!("Starte mit --force um das Starten zu erzwingen.");
+        exit(1);
     }
 
     // Den Daemon erstellen und starten
