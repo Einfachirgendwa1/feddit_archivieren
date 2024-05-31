@@ -302,6 +302,7 @@ fn archive(running: Arc<Mutex<bool>>) {
         if unwrap_mutex_save!(running) == false {
             return;
         }
+        sleep(Duration::from_millis(50));
     }
 }
 
@@ -311,5 +312,6 @@ fn feddit(running: Arc<Mutex<bool>>) {
         if unwrap_mutex_save!(running) == false {
             return;
         }
+        sleep(Duration::from_millis(50));
     }
 }
