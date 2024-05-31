@@ -58,6 +58,21 @@ struct Cli {
     force: bool,
 }
 
+fn print_to_update_log(msg: &str) {
+    match if !Path::new(settings::UPDATE_LOG_FILE).exists() {
+        File::create(settings::UPDATE_LOG_FILE)
+    } else {
+        File::options().append(true).open(settings::UPDATE_LOG_FILE)
+    } {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(msg.as_bytes()) {
+                println!("{}", err);
+            }
+        }
+        Err(err) => println!("{}", err),
+    }
+}
+
 fn main() {
     let args = Cli::parse();
     let force = args.force;
@@ -65,33 +80,19 @@ fn main() {
     match args.subcommand {
         Commands::Install => {
             let mut replace_daemon = false;
-            let print;
             if daemon_running() {
                 if force {
-                    print = None;
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
-                    print = Some(|msg: &str| match File::create(settings::UPDATE_LOG_FILE) {
-                        Ok(mut file) => {
-                            if let Err(err) = file.write_all(msg.as_bytes()) {
-                                eprintln!("{}", err);
-                            }
-                        }
-                        Err(err) => eprintln!("{}", err),
-                    });
-
-                    let print = print.unwrap();
-                    print("Es läuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    print_to_update_log("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
-                        print(&format!("Fehler beim Stoppen des Daemons: {}", err));
+                        print_to_update_log(&format!("Fehler beim Stoppen des Daemons: {}", err));
                         exit(1);
                     }
-                    print("Gestoppt!");
+                    print_to_update_log("Gestoppt!");
                 }
-            } else {
-                print = None;
             }
 
             // Die alten Binarys löschen
@@ -124,9 +125,8 @@ fn main() {
             println!("Installation erfolgreich!");
 
             if replace_daemon {
-                let print = print.unwrap();
-                print("Starte den Daemon neu...");
-                start_daemon!(print);
+                print_to_update_log("Starte den Daemon neu...");
+                start_daemon!(print_to_update_log);
             }
         }
         Commands::Start => {
