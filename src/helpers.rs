@@ -290,7 +290,7 @@ pub fn update(
         }
 
         if !success {
-            println!("Falle auf main zurück.");
+            print_maybe_override!("Falle auf main zurück.");
         }
     }
 
