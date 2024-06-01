@@ -189,6 +189,7 @@ fn main() {
             exit(clean());
         }
         Commands::Info => {
+            println!("Feddit-Archivieren Version {}", env!("CARGO_PKG_VERSION"));
             if !daemon_running() {
                 println!("Der Daemon läuft nicht.")
             } else {
