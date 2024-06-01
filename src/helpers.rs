@@ -260,7 +260,8 @@ pub fn update(
             settings::GIT_BRANCH
         );
         let success;
-        match Command::new("git checkout")
+        match Command::new("git")
+            .arg("checkout")
             .arg(settings::GIT_BRANCH)
             .current_dir(settings::UDPATE_DIR)
             .output()
