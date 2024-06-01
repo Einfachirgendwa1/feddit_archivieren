@@ -256,7 +256,7 @@ pub fn update(
 
     if settings::GIT_BRANCH != "main" {
         print_maybe_override!(
-            "Wechsel von der branch main zur branch {}",
+            "Wechsel von Branch main zu Branch {}...",
             settings::GIT_BRANCH
         );
         let success;
@@ -269,7 +269,7 @@ pub fn update(
             Ok(output) => {
                 success = output.status.success();
                 if output.status.success() {
-                    print_maybe_override!("Jetzt erfolgreich auf Branch {}", settings::GIT_BRANCH);
+                    print_maybe_override!("Zu Branch {} gewechselt.", settings::GIT_BRANCH);
                 } else {
                     print_maybe_override!(
                         "Fehler beim Auschecken von {} in {}: {}",
