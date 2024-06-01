@@ -2,7 +2,7 @@
 
 use std::{
     fs::{read_to_string, remove_dir_all, rename, File},
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
@@ -22,6 +22,31 @@ macro_rules! wait_with_timeout {
         while !$closure() && start.elapsed() < $timeout {}
         $closure()
     }};
+}
+
+#[macro_export]
+macro_rules! print_formatted_to_update_log {
+    ($($args:expr), *) => {
+        let msg = &format!($($args), *);
+        println!("{}", msg);
+        print_to_update_log(msg);
+    };
+}
+
+pub fn print_to_update_log(msg: &str) {
+    println!("{}", msg);
+    match if !Path::new(settings::UPDATE_LOG_FILE).exists() {
+        File::create(settings::UPDATE_LOG_FILE)
+    } else {
+        File::options().append(true).open(settings::UPDATE_LOG_FILE)
+    } {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(&format!("{}\n", msg).as_bytes()) {
+                println!("{}", err);
+            }
+        }
+        Err(err) => println!("{}", err),
+    }
 }
 
 /// Überprüft die Bedingung `condition` und wenn sie falsch ergibt printet `message` zu stderr und
@@ -162,13 +187,14 @@ pub fn update(
     print_args: Option<Arc<Mutex<Vec<TcpStream>>>>,
 ) -> Result<(), String> {
     macro_rules! print_maybe_override {
-        ($e:expr) => {
+        ($($e:expr), *) => {{
+            let msg = &format!($($e), *);
             if print_override.is_some() {
-                print_override.unwrap()($e, print_args.clone().unwrap())
+                print_override.unwrap()(msg, print_args.clone().unwrap())
             } else {
-                println!("{}", $e);
+                println!("{}", msg);
             }
-        };
+        }};
     }
 
     let old_dir = Path::new(settings::UDPATE_DIR);
@@ -177,29 +203,29 @@ pub fn update(
 
     if build_cache_exists {
         if Path::new(settings::UDPATE_CACHE_DIR).exists() {
-            print_maybe_override!(&format!("Lösche {}...", settings::UDPATE_CACHE_DIR));
+            print_maybe_override!("Lösche {}...", settings::UDPATE_CACHE_DIR);
             if let Err(err) = remove_dir_all(settings::UDPATE_CACHE_DIR) {
-                print_maybe_override!(&format!(
+                print_maybe_override!(
                     "Fehler beim Löschen von {}: {}",
                     settings::UDPATE_CACHE_DIR,
                     err
-                ))
+                );
             }
         }
 
-        print_maybe_override!(&format!(
+        print_maybe_override!(
             "Bewege {:?} nach \"{}\"...",
             build_cache,
             settings::UDPATE_CACHE_DIR
-        ));
+        );
 
         if let Err(err) = rename(&build_cache, settings::UDPATE_CACHE_DIR) {
-            print_maybe_override!(&format!(
+            print_maybe_override!(
                 "Fehler beim Bewegen des Caches von {:?} zu {}: {}.",
                 build_cache,
                 settings::UDPATE_CACHE_DIR,
                 err
-            ));
+            );
 
             print_maybe_override!("Ignoriere den Build Cache.");
             build_cache_exists = false;
@@ -207,7 +233,7 @@ pub fn update(
     }
 
     if old_dir.exists() {
-        print_maybe_override!(&format!("Lösche {}...", settings::UDPATE_DIR));
+        print_maybe_override!("Lösche {}...", settings::UDPATE_DIR);
 
         if let Err(err) = remove_dir_all(settings::UDPATE_DIR) {
             return Err(format!(
@@ -218,30 +244,55 @@ pub fn update(
         }
     }
 
-    print_maybe_override!(&format!(
+    print_maybe_override!(
         "Klone {} nach {}...",
         settings::GITHUB_LINK,
         settings::UDPATE_DIR
-    ));
+    );
 
-    if let Err(err) = Repository::clone(settings::GITHUB_LINK, settings::UDPATE_DIR) {
-        return Err(format!("Fehler beim Klonen: {}", err));
+    let repo = match Repository::clone(settings::GITHUB_LINK, settings::UDPATE_DIR) {
+        Err(err) => return Err(format!("Fehler beim Klonen: {}", err)),
+        Ok(repo) => repo,
+    };
+
+    if settings::GIT_BRANCH != "main" {
+        print_maybe_override!("Wechsel von main zur branch {}", settings::GIT_BRANCH);
+        match repo.revparse_ext(settings::GIT_BRANCH) {
+            Err(err) => {
+                print_maybe_override!("Fehler beim Finden von {}: {}", settings::GIT_BRANCH, err)
+            }
+            Ok((branch, reference)) => {
+                if let Err(err) = repo.checkout_tree(&branch, None) {
+                    print_maybe_override!(
+                        "Fehler beim Auschecken von {}: {}",
+                        settings::GIT_BRANCH,
+                        err
+                    );
+                } else {
+                    if let Err(err) = repo.set_head(reference.unwrap().name().unwrap()) {
+                        print_maybe_override!("Fehler beim Setzen von HEAD: {}", err);
+                    } else {
+                        print_maybe_override!("Branch-Wechsel erfolgreich.");
+                    }
+                }
+            }
+        }
     }
 
     if build_cache_exists {
-        print_maybe_override!(&format!(
+        print_maybe_override!(
             "Bewege \"{}\" nach {:?}...",
             settings::UDPATE_CACHE_DIR,
-            build_cache,
-        ));
+            build_cache
+        );
 
         if let Err(err) = rename(settings::UDPATE_CACHE_DIR, &build_cache) {
-            print_maybe_override!(&format!(
+            print_maybe_override!(
                 "Fehler beim Bewegen des Caches von {} zu {:?}: {}.",
                 settings::UDPATE_CACHE_DIR,
                 build_cache,
                 err
-            ));
+            );
 
             print_maybe_override!("Ignoriere den Build Cache.");
         }
@@ -250,18 +301,15 @@ pub fn update(
     print_maybe_override!("Fertig!");
 
     if get_current_version() == get_update_version() {
-        print_maybe_override!(
-            format!("Bereits die neuste Version ({}).", get_current_version()).as_str()
-        );
+        print_maybe_override!("Bereits die neuste Version ({}).", get_current_version());
         return Ok(());
     }
 
-    print_maybe_override!(format!(
+    print_maybe_override!(
         "Neue Version gefunden: {} -> {}",
         get_current_version(),
         get_update_version()
-    )
-    .as_str());
+    );
     print_maybe_override!("Compile den Source Code...");
 
     // Den Code mithilfe des Makefiles compilen und installieren
@@ -284,11 +332,10 @@ pub fn update(
     }
 
     print_maybe_override!("Fertig!");
-    print_maybe_override!(format!(
+    print_maybe_override!(
         "Die neuste Version ({}) ist jetzt installiert.",
         get_update_version()
-    )
-    .as_str());
+    );
     print_maybe_override!("Update erfolgreich abgeschlossen.");
     Ok(())
 }

@@ -10,7 +10,7 @@ use std::{
 
 use helpers::{
     chmod, command_output_formater, daemon_running, feddit_archivieren_assert, get,
-    read_from_stream, read_pid_file, root, run_command, update,
+    print_to_update_log, read_from_stream, read_pid_file, root, run_command, update,
 };
 
 mod helpers;
@@ -58,21 +58,6 @@ struct Cli {
     force: bool,
 }
 
-fn print_to_update_log(msg: &str) {
-    match if !Path::new(settings::UPDATE_LOG_FILE).exists() {
-        File::create(settings::UPDATE_LOG_FILE)
-    } else {
-        File::options().append(true).open(settings::UPDATE_LOG_FILE)
-    } {
-        Ok(mut file) => {
-            if let Err(err) = file.write_all(&format!("{}\n", msg).as_bytes()) {
-                println!("{}", err);
-            }
-        }
-        Err(err) => println!("{}", err),
-    }
-}
-
 fn main() {
     let args = Cli::parse();
     let force = args.force;
@@ -85,13 +70,13 @@ fn main() {
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
-                    print_to_update_log("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    print_formatted_to_update_log!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
-                        print_to_update_log(&format!("Fehler beim Stoppen des Daemons: {}", err));
+                        print_formatted_to_update_log!("Fehler beim Stoppen des Daemons: {}", err);
                         exit(1);
                     }
-                    print_to_update_log("Gestoppt!");
+                    print_formatted_to_update_log!("Gestoppt!");
                 }
             }
 
@@ -108,11 +93,16 @@ fn main() {
 
             if !Path::new(settings::UDPATE_DIR).exists() {
                 if let Err(err) = create_dir(settings::UDPATE_DIR) {
-                    eprintln!(
+                    let msg = &format!(
                         "Fehler beim Erstellen von {}: {}",
                         settings::UDPATE_DIR,
                         err
                     );
+                    if replace_daemon {
+                        print_formatted_to_update_log!("{}", msg);
+                    } else {
+                        eprintln!("{}", msg);
+                    };
                 }
             }
 
@@ -125,7 +115,7 @@ fn main() {
             println!("Installation erfolgreich!");
 
             if replace_daemon {
-                print_to_update_log("Starte den Daemon neu...");
+                print_formatted_to_update_log!("Starte den Daemon neu...");
                 start_daemon!(print_to_update_log);
             }
         }
