@@ -70,6 +70,7 @@ fn main() {
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
+                    remove_if_existing(settings::UPDATE_LOG_FILE);
                     print_formatted_to_update_log!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
