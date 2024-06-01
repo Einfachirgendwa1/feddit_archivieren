@@ -250,40 +250,37 @@ pub fn update(
         settings::UDPATE_DIR
     );
 
-    let repo = match Repository::clone(settings::GITHUB_LINK, settings::UDPATE_DIR) {
-        Err(err) => return Err(format!("Fehler beim Klonen: {}", err)),
-        Ok(repo) => repo,
+    if let Err(err) = Repository::clone(settings::GITHUB_LINK, settings::UDPATE_DIR) {
+        return Err(format!("Fehler beim Klonen: {}", err));
     };
 
     if settings::GIT_BRANCH != "main" {
         print_maybe_override!("Wechsel von main zur branch {}", settings::GIT_BRANCH);
-        let checkout_successful;
-        match repo.revparse_ext(settings::GIT_BRANCH) {
-            Err(err) => {
-                checkout_successful = false;
-                print_maybe_override!("Fehler beim Finden von {}: {}", settings::GIT_BRANCH, err)
-            }
-            Ok((branch, reference)) => {
-                if let Err(err) = repo.checkout_tree(&branch, None) {
-                    checkout_successful = false;
+        match Command::new("git checkout")
+            .arg(settings::GIT_BRANCH)
+            .current_dir(settings::UDPATE_DIR)
+            .output()
+        {
+            Ok(output) => {
+                if !output.status.success() {
                     print_maybe_override!(
-                        "Fehler beim Auschecken von {}: {}",
+                        "Fehler beim Auschecken von {} in {}: {}",
                         settings::GIT_BRANCH,
-                        err
+                        settings::UDPATE_DIR,
+                        command_output_formater(&output)
                     );
                 } else {
-                    if let Err(err) = repo.set_head(reference.unwrap().name().unwrap()) {
-                        checkout_successful = false;
-                        print_maybe_override!("Fehler beim Setzen von HEAD: {}", err);
-                    } else {
-                        checkout_successful = true;
-                        print_maybe_override!("Branch-Wechsel erfolgreich.");
-                    }
+                    print_maybe_override!("Jetzt erfolgreich auf Branch {}", settings::GIT_BRANCH);
                 }
             }
-        }
-        if !checkout_successful {
-            print_maybe_override!("Falle auf branch \"main\" zurück.");
+            Err(err) => {
+                print_maybe_override!(
+                    "Fehler beim Auschecken von {} in {}: {}",
+                    settings::GIT_BRANCH,
+                    settings::UDPATE_DIR,
+                    err
+                );
+            }
         }
     }
 
