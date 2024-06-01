@@ -267,15 +267,15 @@ pub fn update(
         {
             Ok(output) => {
                 success = output.status.success();
-                if !output.status.success() {
+                if output.status.success() {
+                    print_maybe_override!("Jetzt erfolgreich auf Branch {}", settings::GIT_BRANCH);
+                } else {
                     print_maybe_override!(
                         "Fehler beim Auschecken von {} in {}: {}",
                         settings::GIT_BRANCH,
                         settings::UDPATE_DIR,
                         command_output_formater(&output)
                     );
-                } else {
-                    print_maybe_override!("Jetzt erfolgreich auf Branch {}", settings::GIT_BRANCH);
                 }
             }
             Err(err) => {
