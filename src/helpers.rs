@@ -255,13 +255,18 @@ pub fn update(
     };
 
     if settings::GIT_BRANCH != "main" {
-        print_maybe_override!("Wechsel von main zur branch {}", settings::GIT_BRANCH);
+        print_maybe_override!(
+            "Wechsel von der branch main zur branch {}",
+            settings::GIT_BRANCH
+        );
+        let success;
         match Command::new("git checkout")
             .arg(settings::GIT_BRANCH)
             .current_dir(settings::UDPATE_DIR)
             .output()
         {
             Ok(output) => {
+                success = output.status.success();
                 if !output.status.success() {
                     print_maybe_override!(
                         "Fehler beim Auschecken von {} in {}: {}",
@@ -274,6 +279,7 @@ pub fn update(
                 }
             }
             Err(err) => {
+                success = false;
                 print_maybe_override!(
                     "Fehler beim Auschecken von {} in {}: {}",
                     settings::GIT_BRANCH,
@@ -281,6 +287,10 @@ pub fn update(
                     err
                 );
             }
+        }
+
+        if !success {
+            println!("Falle auf main zurück.");
         }
     }
 
