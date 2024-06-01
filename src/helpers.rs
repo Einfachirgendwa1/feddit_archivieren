@@ -257,12 +257,15 @@ pub fn update(
 
     if settings::GIT_BRANCH != "main" {
         print_maybe_override!("Wechsel von main zur branch {}", settings::GIT_BRANCH);
+        let checkout_successful;
         match repo.revparse_ext(settings::GIT_BRANCH) {
             Err(err) => {
+                checkout_successful = false;
                 print_maybe_override!("Fehler beim Finden von {}: {}", settings::GIT_BRANCH, err)
             }
             Ok((branch, reference)) => {
                 if let Err(err) = repo.checkout_tree(&branch, None) {
+                    checkout_successful = false;
                     print_maybe_override!(
                         "Fehler beim Auschecken von {}: {}",
                         settings::GIT_BRANCH,
@@ -270,12 +273,17 @@ pub fn update(
                     );
                 } else {
                     if let Err(err) = repo.set_head(reference.unwrap().name().unwrap()) {
+                        checkout_successful = false;
                         print_maybe_override!("Fehler beim Setzen von HEAD: {}", err);
                     } else {
+                        checkout_successful = true;
                         print_maybe_override!("Branch-Wechsel erfolgreich.");
                     }
                 }
             }
+        }
+        if !checkout_successful {
+            print_maybe_override!("Falle auf branch \"main\" zurück.");
         }
     }
 
