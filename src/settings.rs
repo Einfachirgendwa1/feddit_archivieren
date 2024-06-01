@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-pub const GIT_BRANCH: &'static str = "dev";
+pub const GIT_BRANCH: &'static str = "dev2";
 pub const DAEMON_PATH: &'static str = "/usr/bin/feddit_archive_daemon";
 pub const CLIENT_PATH: &'static str = "/usr/bin/feddit_archivieren";
 pub const RUN_DIR: &'static str = "/run/feddit_archivieren";
