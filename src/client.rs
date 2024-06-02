@@ -56,11 +56,17 @@ struct Cli {
     /// Erzwingt die gegebene Aktion (genaues Verhalten variiert)
     #[arg(short, long, action = ArgAction::SetTrue, global = true)]
     force: bool,
+
+    /// Gibt bei "install" an, ob es sich um einen debug build handelt oder nicht, d.h. ob sich die
+    /// binarys in target/debug oder target/release befinden.
+    #[arg(short, long, action = ArgAction::SetTrue, global = true)]
+    dev_build: bool,
 }
 
 fn main() {
     let args = Cli::parse();
     let force = args.force;
+    let dev_build = args.dev_build;
 
     match args.subcommand {
         Commands::Install => {
@@ -85,8 +91,13 @@ fn main() {
             remove_if_existing(settings::CLIENT_PATH);
 
             // Die neuen an die richtige Stelle kopieren
-            copy_file("target/debug/daemon", settings::DAEMON_PATH);
-            copy_file("target/debug/client", settings::CLIENT_PATH);
+            if dev_build {
+                copy_file("target/debug/daemon", settings::DAEMON_PATH);
+                copy_file("target/debug/client", settings::CLIENT_PATH);
+            } else {
+                copy_file("target/release/daemon", settings::DAEMON_PATH);
+                copy_file("target/release/client", settings::CLIENT_PATH);
+            }
 
             // Das Update und Run-Verzeichnis erstellen
             create_run_dir();
