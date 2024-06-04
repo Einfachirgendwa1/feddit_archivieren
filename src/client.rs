@@ -545,6 +545,8 @@ fn restart_daemon() -> Result<(), String> {
     // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
     let daemon_stopped = wait_with_timeout!(|| !daemon_running(), Duration::from_secs(1));
 
+    print_to_update_log("Der Daemon wurde gestoppt");
+
     if !daemon_stopped {
         Err("Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.".to_string())
     } else {
