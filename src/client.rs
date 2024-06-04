@@ -76,9 +76,7 @@ fn main() {
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
-                    dbg!("Das ist ein Test...");
                     print_formatted_to_update_log!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
-                    print_formatted_to_update_log!("Das ist ein Test...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
                         print_formatted_to_update_log!("Fehler beim Stoppen des Daemons: {}", err);
@@ -542,6 +540,7 @@ fn restart_daemon() -> Result<(), String> {
             response
         ));
     }
+    print_to_update_log("Empfangen erfolgreich");
 
     // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
     let daemon_stopped = wait_with_timeout!(|| !daemon_running(), Duration::from_secs(1));
