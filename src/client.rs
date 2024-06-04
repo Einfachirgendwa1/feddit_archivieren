@@ -76,11 +76,15 @@ fn main() {
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
+                    dbg!("Das ist ein Test...");
                     print_formatted_to_update_log!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    print_formatted_to_update_log!("Das ist ein Test...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
                         print_formatted_to_update_log!("Fehler beim Stoppen des Daemons: {}", err);
                         exit(1);
+                    } else {
+                        print_formatted_to_update_log!("test");
                     }
                     if !daemon_running() {
                         print_formatted_to_update_log!("Gestoppt!");
@@ -528,7 +532,9 @@ fn stop_daemon() -> Result<(), String> {
 
 /// Restartet den Daemon
 fn restart_daemon() -> Result<(), String> {
+    print_to_update_log("Sende...");
     let mut stream = send_to_daemon("restart");
+    print_to_update_log("Empfange...");
     let response = read_from_stream(&mut stream);
     if !(response == "ok") {
         return Err(format!(

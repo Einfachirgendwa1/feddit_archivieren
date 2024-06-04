@@ -9,6 +9,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use chrono::Local;
 use git2::Repository;
 
 use crate::settings::{self, PID_FILE};
@@ -34,6 +35,7 @@ macro_rules! print_formatted_to_update_log {
 }
 
 pub fn print_to_update_log(msg: &str) {
+    let msg = format!("[{}], {}", Local::now(), msg);
     println!("{}", msg);
     match if !Path::new(settings::UPDATE_LOG_FILE).exists() {
         File::create(settings::UPDATE_LOG_FILE)
