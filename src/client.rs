@@ -82,7 +82,13 @@ fn main() {
                         print_formatted_to_update_log!("Fehler beim Stoppen des Daemons: {}", err);
                         exit(1);
                     }
-                    print_formatted_to_update_log!("Gestoppt!");
+                    if !daemon_running() {
+                        print_formatted_to_update_log!("Gestoppt!");
+                    } else {
+                        print_formatted_to_update_log!(
+                            "?????? Irgendwas ist mit der restart_daemon Funktion falsch???????"
+                        );
+                    }
                 }
             }
 
