@@ -21,7 +21,7 @@ mod settings;
 enum Commands {
     /// Startet den Daemon
     Start,
-    /// Killt den Daemon (ohne zu Daten zu sichern)
+    /// Killt den Daemon (ohne Daten zu sichern)
     Kill,
     /// Updated das Programm auf die neuste Version
     Update,
