@@ -18,4 +18,4 @@ pub const FEDDIT_LINK: &'static str =
     "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";
 
 pub const TCP_BUFFER_SIZE: usize = 1024;
-pub const UPDATE_FETCH_DELAY: std::time::Duration = std::time::Duration::from_secs(60 * 15);
+pub const UPDATE_FETCH_DELAY: std::time::Duration = std::time::Duration::from_secs(120);
