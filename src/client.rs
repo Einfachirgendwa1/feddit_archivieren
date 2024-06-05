@@ -328,6 +328,13 @@ fn main() {
                         exit(1);
                     }
 
+                    if wait_with_timeout!(|| daemon_ready(), Duration::from_secs(1)) {
+                        println!("Der Daemon ist bereit Verbindungen zu empfangen!");
+                    } else {
+                        println!("Der Daemon ist 1 Sekunde nach Start immer noch nicht bereit Verbindungen zu empfangen.");
+                        exit(1)
+                    }
+
                     println!("Stelle Verbindung wieder her...");
                     stream = send_to_daemon("listen");
                 } else {
@@ -388,7 +395,7 @@ fn kill_daemon() {
         eprintln!("Probiers mal mit dem pkill Befehl?");
     }
 
-    match Command::new("kill").arg(read_pid_file()).output() {
+    match Command::new("kill").arg(read_pid_file().unwrap()).output() {
         Ok(output) => {
             if !output.status.success() {
                 eprintln!("Fehler beim Killen des Daemons:");
@@ -403,6 +410,10 @@ fn kill_daemon() {
     }
 }
 
+fn daemon_ready() -> bool {
+    TcpStream::connect(get(settings::SOCKET_FILE)).is_ok()
+}
+
 /// Öffnet einen TcpStream mit dem Daemon und schreibt eine Nachricht hinein.
 /// Returnt am Ende den erstellten TcpStream.
 fn send_to_daemon(message: &str) -> TcpStream {
@@ -412,7 +423,8 @@ fn send_to_daemon(message: &str) -> TcpStream {
         Ok(stream) => stream,
         Err(err) => {
             eprintln!(
-                "Fehler beim Verbinden mit {}: {}",
+                "Fehler beim Verbinden mit {} ({}): {}",
+                get(settings::SOCKET_FILE),
                 settings::SOCKET_FILE,
                 err
             );

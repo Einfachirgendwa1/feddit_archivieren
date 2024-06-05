@@ -48,22 +48,29 @@ pub fn pid_file_exists() -> bool {
 }
 
 /// Returnt den Inhalt von PID_FILE, wenn es nicht existiert exitet mit 1
-pub fn read_pid_file() -> String {
+pub fn read_pid_file() -> Result<String, String> {
     feddit_archivieren_assert(
         pid_file_exists(),
         "Versuche PID Datei zu lesen, sie existiert aber nicht.",
     );
-    BufReader::new(File::open(PID_FILE).unwrap())
+    match BufReader::new(File::open(PID_FILE).unwrap())
         .lines()
         .filter_map(Result::ok)
         .next()
-        .unwrap()
+    {
+        Some(line) => Ok(line),
+        None => Err("Die PID Datei ist leer.".to_string()),
+    }
 }
 
 /// Returnt ob der Daemon gerade läuft
 pub fn daemon_running() -> bool {
     if pid_file_exists() {
-        Path::new(&format!("/proc/{}", read_pid_file())).exists()
+        if let Ok(pid) = read_pid_file() {
+            Path::new(&format!("/proc/{}", pid)).exists()
+        } else {
+            false
+        }
     } else {
         false
     }
