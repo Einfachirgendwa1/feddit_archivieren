@@ -2,6 +2,7 @@
 name = "feddit_archivieren"
 version = "0.0.46"
 edition = "2021"
+rust-version = "1.74.1"
 
 [[bin]]
 name = "client"
