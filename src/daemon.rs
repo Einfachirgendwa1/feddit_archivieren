@@ -1,3 +1,4 @@
+use colored::{ColoredString, Colorize};
 use daemonize::Daemonize;
 use helpers::root;
 use std::{
@@ -194,9 +195,7 @@ fn main() {
                         );
                     }
                     "listen" => {
-                        stream
-                            .write_all(b"Achtung: Aktuell noch extrem unstable!")
-                            .unwrap();
+                        stream.write_all(b"Hallo!").unwrap();
 
                         guard.lock().unwrap().push(stream);
                     }

@@ -2,7 +2,7 @@
 
 use std::{
     fs::{read_to_string, remove_dir_all, rename, File},
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Read},
     net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
@@ -13,6 +13,15 @@ use git2::Repository;
 
 use crate::settings::{self, PID_FILE};
 
+#[macro_export]
+macro_rules! trust_me_bro {
+    ($($body:tt)*) => {
+        unsafe {
+            $($body)*
+        }
+    };
+}
+
 /// Wartet maximal `Duration` darauf, dass `Bedingung` true wird, returnt `true` wenn Bedingung vor
 /// Ablauf der Zeit `true` wurde.
 #[macro_export]
@@ -22,31 +31,6 @@ macro_rules! wait_with_timeout {
         while !$closure() && start.elapsed() < $timeout {}
         $closure()
     }};
-}
-
-#[macro_export]
-macro_rules! print_formatted_to_update_log {
-    ($($args:expr), *) => {
-        let msg = &format!($($args), *);
-        println!("{}", msg);
-        print_to_update_log(msg);
-    };
-}
-
-pub fn print_to_update_log(msg: &str) {
-    println!("{}", msg);
-    match if !Path::new(settings::UPDATE_LOG_FILE).exists() {
-        File::create(settings::UPDATE_LOG_FILE)
-    } else {
-        File::options().append(true).open(settings::UPDATE_LOG_FILE)
-    } {
-        Ok(mut file) => {
-            if let Err(err) = file.write_all(&format!("{}\n", msg).as_bytes()) {
-                println!("{}", err);
-            }
-        }
-        Err(err) => println!("{}", err),
-    }
 }
 
 /// Überprüft die Bedingung `condition` und wenn sie falsch ergibt printet `message` zu stderr und
@@ -64,22 +48,29 @@ pub fn pid_file_exists() -> bool {
 }
 
 /// Returnt den Inhalt von PID_FILE, wenn es nicht existiert exitet mit 1
-pub fn read_pid_file() -> String {
+pub fn read_pid_file() -> Result<String, String> {
     feddit_archivieren_assert(
         pid_file_exists(),
         "Versuche PID Datei zu lesen, sie existiert aber nicht.",
     );
-    BufReader::new(File::open(PID_FILE).unwrap())
+    match BufReader::new(File::open(PID_FILE).unwrap())
         .lines()
         .filter_map(Result::ok)
         .next()
-        .unwrap()
+    {
+        Some(line) => Ok(line),
+        None => Err("Die PID Datei ist leer.".to_string()),
+    }
 }
 
 /// Returnt ob der Daemon gerade läuft
 pub fn daemon_running() -> bool {
     if pid_file_exists() {
-        Path::new(&format!("/proc/{}", read_pid_file())).exists()
+        if let Ok(pid) = read_pid_file() {
+            Path::new(&format!("/proc/{}", pid)).exists()
+        } else {
+            false
+        }
     } else {
         false
     }
