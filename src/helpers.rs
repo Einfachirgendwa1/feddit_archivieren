@@ -2,14 +2,13 @@
 
 use std::{
     fs::{read_to_string, remove_dir_all, rename, File},
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Read},
     net::TcpStream,
     path::Path,
     process::{exit, Command, Output},
     sync::{Arc, Mutex},
 };
 
-use chrono::Local;
 use git2::Repository;
 
 use crate::settings::{self, PID_FILE};
