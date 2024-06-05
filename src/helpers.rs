@@ -14,6 +14,15 @@ use git2::Repository;
 
 use crate::settings::{self, PID_FILE};
 
+#[macro_export]
+macro_rules! trust_me_bro {
+    ($($body:tt)*) => {
+        unsafe {
+            $($body)*
+        }
+    };
+}
+
 /// Wartet maximal `Duration` darauf, dass `Bedingung` true wird, returnt `true` wenn Bedingung vor
 /// Ablauf der Zeit `true` wurde.
 #[macro_export]
@@ -23,32 +32,6 @@ macro_rules! wait_with_timeout {
         while !$closure() && start.elapsed() < $timeout {}
         $closure()
     }};
-}
-
-#[macro_export]
-macro_rules! print_formatted_to_update_log {
-    ($($args:expr), *) => {
-        let msg = &format!($($args), *);
-        println!("{}", msg);
-        print_to_update_log(msg);
-    };
-}
-
-pub fn print_to_update_log(msg: &str) {
-    let msg = format!("[{}], {}", Local::now(), msg);
-    println!("{}", msg);
-    match if !Path::new(settings::UPDATE_LOG_FILE).exists() {
-        File::create(settings::UPDATE_LOG_FILE)
-    } else {
-        File::options().append(true).open(settings::UPDATE_LOG_FILE)
-    } {
-        Ok(mut file) => {
-            if let Err(err) = file.write_all(&format!("{}\n", msg).as_bytes()) {
-                println!("{}", err);
-            }
-        }
-        Err(err) => println!("{}", err),
-    }
 }
 
 /// Überprüft die Bedingung `condition` und wenn sie falsch ergibt printet `message` zu stderr und

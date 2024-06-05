@@ -3,6 +3,7 @@ use std::{
     fs::{create_dir, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
     net::TcpStream,
+    os::fd::IntoRawFd,
     path::Path,
     process::{exit, Command},
     time::Duration,
@@ -10,7 +11,7 @@ use std::{
 
 use helpers::{
     chmod, command_output_formater, daemon_running, feddit_archivieren_assert, get,
-    print_to_update_log, read_from_stream, read_pid_file, root, run_command, update,
+    read_from_stream, read_pid_file, root, run_command, update,
 };
 
 mod helpers;
@@ -76,20 +77,19 @@ fn main() {
                     println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
-                    print_formatted_to_update_log!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    if let Err(err) = set_stdio_to_file(settings::UPDATE_LOG_FILE) {
+                        println!("Fehler beim Setzen von Stdio: {}", err);
+                    }
+                    println!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
                     replace_daemon = true;
                     if let Err(err) = restart_daemon() {
-                        print_formatted_to_update_log!("Fehler beim Stoppen des Daemons: {}", err);
+                        println!("Fehler beim Stoppen des Daemons: {}", err);
                         exit(1);
                     } else {
-                        print_formatted_to_update_log!("test");
+                        println!("test");
                     }
                     if !daemon_running() {
-                        print_formatted_to_update_log!("Gestoppt!");
-                    } else {
-                        print_formatted_to_update_log!(
-                            "?????? Irgendwas ist mit der restart_daemon Funktion falsch???????"
-                        );
+                        println!("Gestoppt!");
                     }
                 }
             }
@@ -118,7 +118,7 @@ fn main() {
                         err
                     );
                     if replace_daemon {
-                        print_formatted_to_update_log!("{}", msg);
+                        println!("{}", msg);
                     } else {
                         eprintln!("{}", msg);
                     };
@@ -134,8 +134,8 @@ fn main() {
             println!("Installation erfolgreich!");
 
             if replace_daemon {
-                print_formatted_to_update_log!("Starte den Daemon neu...");
-                start_daemon!(print_to_update_log);
+                println!("Starte den Daemon neu...");
+                start_daemon();
             }
         }
         Commands::Start => {
@@ -148,7 +148,7 @@ fn main() {
                 }
             }
 
-            start_daemon!();
+            start_daemon();
         }
         Commands::Kill => {
             kill_daemon();
@@ -257,7 +257,7 @@ fn main() {
         }
         Commands::Checkhealth => {
             if force && !daemon_running() {
-                start_daemon!();
+                start_daemon();
             } else {
                 feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
             }
@@ -280,7 +280,7 @@ fn main() {
         }
         Commands::Stop => {
             if force && !daemon_running() {
-                start_daemon!();
+                start_daemon();
             } else {
                 feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
             }
@@ -295,7 +295,7 @@ fn main() {
         }
         Commands::Listen => {
             if force && !daemon_running() {
-                start_daemon!();
+                start_daemon();
             } else {
                 feddit_archivieren_assert(daemon_running(), "Der Daemon läuft nicht.");
             }
@@ -430,27 +430,7 @@ fn send_to_daemon(message: &str) -> TcpStream {
     stream
 }
 
-#[macro_export]
-macro_rules! start_daemon {
-    () => {{
-        _start_daemon(None)
-    }};
-    ($print:expr) => {{
-        _start_daemon(Some($print))
-    }};
-}
-
-fn _start_daemon(print_override: Option<fn(&str)>) {
-    macro_rules! print_maybe_override {
-        ($($e:expr), *) => {
-            if let Some(override_function) = print_override {
-                override_function(&format!($($e), *))
-            } else {
-                println!($($e), *);
-            }
-        };
-    }
-
+fn start_daemon() {
     // Das Run-Verzeichnis für den Daemon erstellen
     create_run_dir();
 
@@ -458,19 +438,19 @@ fn _start_daemon(print_override: Option<fn(&str)>) {
     match Command::new(settings::DAEMON_PATH).output() {
         Ok(output) => {
             if !output.status.success() {
-                print_maybe_override!("Fehler beim Starten des Daemons:");
-                print_maybe_override!("{}", command_output_formater(&output));
+                println!("Fehler beim Starten des Daemons:");
+                println!("{}", command_output_formater(&output));
                 exit(1);
             }
 
             if wait_with_timeout!(|| daemon_running(), Duration::from_secs(1)) {
-                print_maybe_override!("Daemon erfolgreich gestartet!");
+                println!("Daemon erfolgreich gestartet!");
             } else {
-                print_maybe_override!("Der Daemon ist nicht online gegangen.");
+                println!("Der Daemon ist nicht online gegangen.");
             }
         }
         Err(err) => {
-            print_maybe_override!("Fehler beim Starten des Daemons: {}", err);
+            println!("Fehler beim Starten des Daemons: {}", err);
             exit(1);
         }
     }
@@ -530,9 +510,9 @@ fn stop_daemon() -> Result<(), String> {
 
 /// Restartet den Daemon
 fn restart_daemon() -> Result<(), String> {
-    print_to_update_log("Sende...");
+    println!("Sende...");
     let mut stream = send_to_daemon("restart");
-    print_to_update_log("Empfange...");
+    println!("Empfange...");
     let response = read_from_stream(&mut stream);
     if !(response == "ok") {
         return Err(format!(
@@ -540,16 +520,32 @@ fn restart_daemon() -> Result<(), String> {
             response
         ));
     }
-    print_to_update_log("Empfangen erfolgreich");
+    println!("Empfangen erfolgreich");
 
     // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
     let daemon_stopped = wait_with_timeout!(|| !daemon_running(), Duration::from_secs(1));
 
-    print_to_update_log("Der Daemon wurde gestoppt");
+    println!("Der Daemon wurde gestoppt");
 
     if !daemon_stopped {
         Err("Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.".to_string())
     } else {
         Ok(())
     }
+}
+
+/// Vom Deamonize Source Code "inspiriert"
+fn set_stdio_to_file(filename: &str) -> Result<(), String> {
+    let file = match File::create(filename) {
+        Ok(file) => file,
+        Err(err) => return Err(err.to_string()),
+    }
+    .into_raw_fd();
+
+    trust_me_bro! {
+        libc::dup2(file, libc::STDOUT_FILENO);
+        libc::dup2(file, libc::STDERR_FILENO);
+    }
+
+    Ok(())
 }
