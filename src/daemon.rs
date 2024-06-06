@@ -1,3 +1,4 @@
+use colored::{ColoredString, Colorize};
 use daemonize::Daemonize;
 use helpers::root;
 use std::{
@@ -13,7 +14,7 @@ mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, pid_file_exists, read_from_stream, update},
+    helpers::{chmod, daemon_running, read_from_stream, update},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, POST_FILE, SOCKET_FILE, URL_FILE},
 };
 
@@ -30,20 +31,33 @@ macro_rules! unwrap_mutex_save {
     }
 }
 
+/// streams, guard, running_guard, url, posts_guard, feddit_guard, archive_guard
+macro_rules! shutdown {
+    ($stream:expr, $guard:expr, $running_guard:expr, $url:expr, $posts_guard:expr, $feddit_guard:expr, $archive_guard:expr) => {
+        print("Stoppe den Daemon.", $guard.clone());
+        unwrap_mutex_save!($running_guard) = false;
+        shutdown_preperations(&*$guard.lock().unwrap(), $url, $posts_guard);
+        wait_with_timeout!(
+            || unwrap_mutex_save!($feddit_guard).is_finished().clone()
+                && unwrap_mutex_save!($archive_guard).is_finished().clone(),
+            Duration::from_secs(1)
+        );
+        $stream.write_all(b"ok").unwrap();
+        println!("Exite.");
+        exit(0);
+    };
+}
+
 fn main() {
     let url = settings::FEDDIT_LINK;
     let posts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Überprüfen ob bereits ein Daemon läuft
-    if pid_file_exists() {
-        println!("PID Datei existiert.");
-        if daemon_running() {
-            println!(
-                "Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden."
-            );
-            println!("Starte mit --force um das Starten zu erzwingen.");
-            exit(1);
-        }
+    if daemon_running() {
+        println!("Es läuft bereits ein Daemon!");
+        println!("Stoppe den Versuch einen neuen Daemon zu starten um Datenverlust zu vermeiden.");
+        println!("Starte mit --force um das Starten zu erzwingen.");
+        exit(1);
     }
 
     // Den Daemon erstellen und starten
@@ -112,7 +126,15 @@ fn main() {
     // Update Thread spawnen
     let guard = recievers.clone();
     thread::spawn(move || loop {
+        print(
+            &format!(
+                "Warte {} Sekunden vor der nächsten Updateüberprüfung...",
+                settings::UPDATE_FETCH_DELAY.as_secs()
+            ),
+            guard.clone(),
+        );
         sleep(settings::UPDATE_FETCH_DELAY);
+        print("Update...", guard.clone());
         if let Err(err) = update(Some(print), Some(guard.clone())) {
             eprint(format!("{}", err).as_str(), guard.clone());
         }
@@ -148,23 +170,32 @@ fn main() {
                         print("Schreibe 'pong' in den stream", guard);
                         stream.write_all(b"pong").unwrap();
                     }
-                    "stop" => {
-                        print("Stoppe den Daemon.", guard.clone());
-                        unwrap_mutex_save!(running_guard) = false;
-                        shutdown_preperations(&*guard.lock().unwrap(), url, posts_guard);
-                        wait_with_timeout!(
-                            || unwrap_mutex_save!(feddit_guard).is_finished().clone()
-                                && unwrap_mutex_save!(archive_guard).is_finished().clone(),
-                            Duration::from_secs(1)
-                        );
+                    "restart" => {
+                        print("restart", guard.clone());
                         stream.write_all(b"ok").unwrap();
-                        println!("Exite.");
-                        exit(0);
+                        shutdown!(
+                            stream,
+                            guard,
+                            running_guard,
+                            url,
+                            posts_guard,
+                            feddit_guard,
+                            archive_guard
+                        );
+                    }
+                    "stop" => {
+                        shutdown!(
+                            stream,
+                            guard,
+                            running_guard,
+                            url,
+                            posts_guard,
+                            feddit_guard,
+                            archive_guard
+                        );
                     }
                     "listen" => {
-                        stream
-                            .write_all(b"Achtung: Aktuell noch extrem unstable!")
-                            .unwrap();
+                        stream.write_all(b"Hallo!").unwrap();
 
                         guard.lock().unwrap().push(stream);
                     }
@@ -266,6 +297,7 @@ fn archive(running: Arc<Mutex<bool>>) {
         if unwrap_mutex_save!(running) == false {
             return;
         }
+        sleep(Duration::from_millis(50));
     }
 }
 
@@ -275,5 +307,6 @@ fn feddit(running: Arc<Mutex<bool>>) {
         if unwrap_mutex_save!(running) == false {
             return;
         }
+        sleep(Duration::from_millis(50));
     }
 }

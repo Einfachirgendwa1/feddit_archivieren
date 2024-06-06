@@ -3,6 +3,7 @@ use std::{
     fs::{create_dir, remove_dir_all, remove_file, File},
     io::{BufRead, BufReader, Write},
     net::TcpStream,
+    os::fd::IntoRawFd,
     path::Path,
     process::{exit, Command},
     time::Duration,
@@ -20,7 +21,7 @@ mod settings;
 enum Commands {
     /// Startet den Daemon
     Start,
-    /// Killt den Daemon (ohne zu Daten zu sichern)
+    /// Killt den Daemon (ohne Daten zu sichern)
     Kill,
     /// Updated das Programm auf die neuste Version
     Update,
@@ -56,20 +57,40 @@ struct Cli {
     /// Erzwingt die gegebene Aktion (genaues Verhalten variiert)
     #[arg(short, long, action = ArgAction::SetTrue, global = true)]
     force: bool,
+
+    /// Gibt bei "install" an, ob es sich um einen debug build handelt oder nicht, d.h. ob sich die
+    /// binarys in target/debug oder target/release befinden.
+    #[arg(short, long, action = ArgAction::SetTrue, global = true)]
+    dev_build: bool,
 }
 
 fn main() {
     let args = Cli::parse();
     let force = args.force;
+    let dev_build = args.dev_build;
 
     match args.subcommand {
         Commands::Install => {
+            let mut replace_daemon = false;
             if daemon_running() {
                 if force {
+                    println!("Force-Kille den Daemon...");
                     kill_daemon();
                 } else {
-                    eprintln!("Es läuft aktuell schon ein Daemon!");
-                    exit(1);
+                    if let Err(err) = set_stdio_to_file(settings::UPDATE_LOG_FILE) {
+                        println!("Fehler beim Setzen von Stdio: {}", err);
+                    }
+                    println!("Es laeuft bereits ein Daemon, versuche ihn zu restarten mit der neuen Version...");
+                    replace_daemon = true;
+                    if let Err(err) = restart_daemon() {
+                        println!("Fehler beim Stoppen des Daemons: {}", err);
+                        exit(1);
+                    } else {
+                        println!("test");
+                    }
+                    if !daemon_running() {
+                        println!("Gestoppt!");
+                    }
                 }
             }
 
@@ -78,19 +99,29 @@ fn main() {
             remove_if_existing(settings::CLIENT_PATH);
 
             // Die neuen an die richtige Stelle kopieren
-            copy_file("target/debug/daemon", settings::DAEMON_PATH);
-            copy_file("target/debug/client", settings::CLIENT_PATH);
+            if dev_build {
+                copy_file("target/debug/daemon", settings::DAEMON_PATH);
+                copy_file("target/debug/client", settings::CLIENT_PATH);
+            } else {
+                copy_file("target/release/daemon", settings::DAEMON_PATH);
+                copy_file("target/release/client", settings::CLIENT_PATH);
+            }
 
             // Das Update und Run-Verzeichnis erstellen
             create_run_dir();
 
             if !Path::new(settings::UDPATE_DIR).exists() {
                 if let Err(err) = create_dir(settings::UDPATE_DIR) {
-                    eprintln!(
+                    let msg = &format!(
                         "Fehler beim Erstellen von {}: {}",
                         settings::UDPATE_DIR,
                         err
                     );
+                    if replace_daemon {
+                        println!("{}", msg);
+                    } else {
+                        eprintln!("{}", msg);
+                    };
                 }
             }
 
@@ -101,6 +132,11 @@ fn main() {
             }
 
             println!("Installation erfolgreich!");
+
+            if replace_daemon {
+                println!("Starte den Daemon neu...");
+                start_daemon();
+            }
         }
         Commands::Start => {
             if daemon_running() {
@@ -172,6 +208,7 @@ fn main() {
             exit(clean());
         }
         Commands::Info => {
+            println!("Feddit-Archivieren Version {}", env!("CARGO_PKG_VERSION"));
             if !daemon_running() {
                 println!("Der Daemon läuft nicht.")
             } else {
@@ -271,7 +308,38 @@ fn main() {
                     println!("Der Daemon hat die Verbindung geschlossen.");
                     exit(0);
                 }
-                println!("{}", response);
+                if response.to_lowercase().trim() == "restart" {
+                    println!("Der Daemon wird neu gestartet.");
+                    if daemon_running() {
+                        if wait_with_timeout!(|| !daemon_running(), Duration::from_millis(500)) {
+                            println!("Der Daemon wurde gestoppt.");
+                        } else {
+                            println!("Der Daemon wurde innerhalb von 0.5 Sekunden nicht beendet.");
+                            exit(1);
+                        }
+                    }
+
+                    if wait_with_timeout!(|| daemon_running(), Duration::from_secs(5)) {
+                        println!("Der Daemon ist wieder online!");
+                    } else {
+                        println!(
+                            "Der Daemon ist innerhalb von 5 Sekunden nicht wieder online gegangen."
+                        );
+                        exit(1);
+                    }
+
+                    if wait_with_timeout!(|| daemon_ready(), Duration::from_secs(1)) {
+                        println!("Der Daemon ist bereit Verbindungen zu empfangen!");
+                    } else {
+                        println!("Der Daemon ist 1 Sekunde nach Start immer noch nicht bereit Verbindungen zu empfangen.");
+                        exit(1)
+                    }
+
+                    println!("Stelle Verbindung wieder her...");
+                    stream = send_to_daemon("listen");
+                } else {
+                    println!("{}", response);
+                }
             }
         }
         Commands::Uninstall => {
@@ -327,7 +395,7 @@ fn kill_daemon() {
         eprintln!("Probiers mal mit dem pkill Befehl?");
     }
 
-    match Command::new("kill").arg(read_pid_file()).output() {
+    match Command::new("kill").arg(read_pid_file().unwrap()).output() {
         Ok(output) => {
             if !output.status.success() {
                 eprintln!("Fehler beim Killen des Daemons:");
@@ -342,6 +410,10 @@ fn kill_daemon() {
     }
 }
 
+fn daemon_ready() -> bool {
+    TcpStream::connect(get(settings::SOCKET_FILE)).is_ok()
+}
+
 /// Öffnet einen TcpStream mit dem Daemon und schreibt eine Nachricht hinein.
 /// Returnt am Ende den erstellten TcpStream.
 fn send_to_daemon(message: &str) -> TcpStream {
@@ -351,7 +423,8 @@ fn send_to_daemon(message: &str) -> TcpStream {
         Ok(stream) => stream,
         Err(err) => {
             eprintln!(
-                "Fehler beim Verbinden mit {}: {}",
+                "Fehler beim Verbinden mit {} ({}): {}",
+                get(settings::SOCKET_FILE),
                 settings::SOCKET_FILE,
                 err
             );
@@ -377,15 +450,19 @@ fn start_daemon() {
     match Command::new(settings::DAEMON_PATH).output() {
         Ok(output) => {
             if !output.status.success() {
-                eprintln!("Fehler beim Starten des Daemons:");
-                eprintln!("{}", command_output_formater(&output));
+                println!("Fehler beim Starten des Daemons:");
+                println!("{}", command_output_formater(&output));
                 exit(1);
             }
 
-            println!("Daemon erfolgreich gestartet!");
+            if wait_with_timeout!(|| daemon_running(), Duration::from_secs(1)) {
+                println!("Daemon erfolgreich gestartet!");
+            } else {
+                println!("Der Daemon ist nicht online gegangen.");
+            }
         }
         Err(err) => {
-            eprintln!("Fehler beim Starten des Daemons: {}", err);
+            println!("Fehler beim Starten des Daemons: {}", err);
             exit(1);
         }
     }
@@ -441,4 +518,46 @@ fn stop_daemon() -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+/// Restartet den Daemon
+fn restart_daemon() -> Result<(), String> {
+    println!("Sende...");
+    let mut stream = send_to_daemon("restart");
+    println!("Empfange...");
+    let response = read_from_stream(&mut stream);
+    if !(response == "ok") {
+        return Err(format!(
+            "Der Daemon hat eine unerwartete Antwort gesendet: {}",
+            response
+        ));
+    }
+    println!("Empfangen erfolgreich");
+
+    // Darauf warten, dass der Daemon exitet, maximal 1 Sekunde lang warten
+    let daemon_stopped = wait_with_timeout!(|| !daemon_running(), Duration::from_secs(1));
+
+    println!("Der Daemon wurde gestoppt");
+
+    if !daemon_stopped {
+        Err("Der Daemon hat eine Bestätigung gesendet, läuft aber immer noch.".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+/// Vom Deamonize Source Code "inspiriert"
+fn set_stdio_to_file(filename: &str) -> Result<(), String> {
+    let file = match File::create(filename) {
+        Ok(file) => file,
+        Err(err) => return Err(err.to_string()),
+    }
+    .into_raw_fd();
+
+    trust_me_bro! {
+        libc::dup2(file, libc::STDOUT_FILENO);
+        libc::dup2(file, libc::STDERR_FILENO);
+    }
+
+    Ok(())
 }
