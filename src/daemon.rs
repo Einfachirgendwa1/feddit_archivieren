@@ -315,43 +315,6 @@ fn archive(running: ArcMutex<bool>) {
     }
 }
 
-fn get_url(url: &str) -> Result<blocking::Response, String> {
-    match blocking::get(url) {
-        Ok(response) => {
-            if response.status().is_success() {
-                Ok(response)
-            } else if response.status().is_server_error() {
-                return Err(format!(
-                    "Erfolg beim Fetchen von {}, aber Fehler vom Server: {} ({})",
-                    settings::FEDDIT_URL,
-                    response.status(),
-                    response
-                        .status()
-                        .canonical_reason()
-                        .unwrap_or("Keine weiteren Informationen")
-                ));
-            } else {
-                return Err(format!(
-                    "Erfolg beim Fetchen von {}, aber unerfolgreicher Status: {} ({})",
-                    settings::FEDDIT_URL,
-                    response.status(),
-                    response
-                        .status()
-                        .canonical_reason()
-                        .unwrap_or("Keine weiteren Informationen")
-                ));
-            }
-        }
-        Err(err) => {
-            return Err(format!(
-                "Fehler beim Fetchen von {}: {}",
-                settings::FEDDIT_URL,
-                err
-            ));
-        }
-    }
-}
-
 /// Funktion die vom Feddit-Thread ausgeführt wird
 fn feddit(
     running: ArcMutex<bool>,
@@ -359,7 +322,6 @@ fn feddit(
     feddit_url: ArcMutex<String>,
 ) {
     loop {
-        let guard = streams.clone();
         if unwrap_mutex_save!(running) == false {
             return;
         }
