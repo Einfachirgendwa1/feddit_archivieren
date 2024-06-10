@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-pub const GIT_BRANCH: &'static str = "main";
+pub const GIT_BRANCH: &'static str = "feat/feddit";
 pub const DAEMON_PATH: &'static str = "/usr/bin/feddit_archive_daemon";
 pub const CLIENT_PATH: &'static str = "/usr/bin/feddit_archivieren";
 pub const RUN_DIR: &'static str = "/run/feddit_archivieren";
@@ -14,8 +14,8 @@ pub const SOCKET_FILE: &'static str = "/run/feddit_archivieren/daemon.sck";
 pub const UDPATE_DIR: &'static str = "/var/tmp/feddit_archivieren";
 pub const UDPATE_CACHE_DIR: &'static str = "/var/tmp/feddit_archivieren_cache";
 pub const GITHUB_LINK: &'static str = "https://github.com/Einfachirgendwa1/feddit_archivieren";
-pub const FEDDIT_LINK: &'static str =
-    "https://feddit.de/?dataType=Post&listingType=Local&page=1&sort=New";
+pub const FEDDIT_URL: &'static str = "https://lemmy.ml/api/v3/post/list";
 
 pub const TCP_BUFFER_SIZE: usize = 1024;
 pub const UPDATE_FETCH_DELAY: std::time::Duration = std::time::Duration::from_secs(120);
+pub const FEDDIT_FETCH_DELAY: std::time::Duration = std::time::Duration::from_secs(10);

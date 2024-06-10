@@ -13,6 +13,8 @@ use git2::Repository;
 
 use crate::settings::{self, PID_FILE};
 
+pub type ArcMutex<T> = Arc<Mutex<T>>;
+
 #[macro_export]
 macro_rules! trust_me_bro {
     ($($body:tt)*) => {
@@ -174,8 +176,8 @@ fn get_current_version() -> String {
 
 /// Updatet das Programm
 pub fn update(
-    print_override: Option<fn(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>)>,
-    print_args: Option<Arc<Mutex<Vec<TcpStream>>>>,
+    print_override: Option<fn(message: &str, streams: ArcMutex<Vec<TcpStream>>)>,
+    print_args: Option<ArcMutex<Vec<TcpStream>>>,
 ) -> Result<(), String> {
     macro_rules! print_maybe_override {
         ($($e:expr), *) => {{

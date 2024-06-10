@@ -17,8 +17,10 @@ daemonize = "0.5.0"
 users = "0.11.0"
 colored = "2.1.0"
 chrono = "0.4.38"
-reqwest = "0.12.4"
 clap = { version = "4.5.4", features = ["derive"] }
 toml = "0.8.13"
 git2 = "0.18.3"
 libc = "0.2.155"
+reqwest = { version = "0.12.4", features = ["blocking", "json"] }
+lemmy_api_common = "0.19.4"
+ureq = { version = "2.9.7", features = ["json"] }

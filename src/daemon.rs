@@ -1,20 +1,25 @@
-use colored::{ColoredString, Colorize};
 use daemonize::Daemonize;
 use helpers::root;
+use lemmy_api_common::{
+    lemmy_db_schema::{ListingType, SortType},
+    post::{GetPosts, GetPostsResponse},
+};
+use reqwest::blocking;
 use std::{
     fs::File,
-    io::{BufWriter, ErrorKind, Write},
+    io::{self, BufWriter, ErrorKind, Write},
     net::{TcpListener, TcpStream},
     process::exit,
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
 };
+use ureq::Agent;
 mod helpers;
 mod settings;
 
 use crate::{
-    helpers::{chmod, daemon_running, read_from_stream, update},
+    helpers::{chmod, daemon_running, read_from_stream, update, ArcMutex},
     settings::{ERR_FILE, OUT_FILE, PID_FILE, POST_FILE, SOCKET_FILE, URL_FILE},
 };
 
@@ -36,7 +41,11 @@ macro_rules! shutdown {
     ($stream:expr, $guard:expr, $running_guard:expr, $url:expr, $posts_guard:expr, $feddit_guard:expr, $archive_guard:expr) => {
         print("Stoppe den Daemon.", $guard.clone());
         unwrap_mutex_save!($running_guard) = false;
-        shutdown_preperations(&*$guard.lock().unwrap(), $url, $posts_guard);
+        shutdown_preperations(
+            &*$guard.lock().unwrap(),
+            &unwrap_mutex_save!($url),
+            $posts_guard,
+        );
         wait_with_timeout!(
             || unwrap_mutex_save!($feddit_guard).is_finished().clone()
                 && unwrap_mutex_save!($archive_guard).is_finished().clone(),
@@ -49,8 +58,8 @@ macro_rules! shutdown {
 }
 
 fn main() {
-    let url = settings::FEDDIT_LINK;
-    let posts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
+    let url = Arc::new(Mutex::new(settings::FEDDIT_URL.to_string()));
+    let posts: ArcMutex<Vec<i32>> = Arc::new(Mutex::new(Vec::new()));
 
     // Überprüfen ob bereits ein Daemon läuft
     if daemon_running() {
@@ -90,7 +99,7 @@ fn main() {
     chmod_to_non_root(URL_FILE);
     chmod_to_non_root(POST_FILE);
 
-    let recievers: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
+    let recievers: ArcMutex<Vec<TcpStream>> = Arc::new(Mutex::new(Vec::new()));
 
     match daemonize.start() {
         Ok(_) => println!("Daemon erfolgreich gestartet."),
@@ -121,7 +130,11 @@ fn main() {
     let guard = running.clone();
     let archive = Arc::new(Mutex::new(thread::spawn(|| archive(guard))));
     let guard = running.clone();
-    let feddit = Arc::new(Mutex::new(thread::spawn(|| feddit(guard))));
+    let guard_streams = recievers.clone();
+    let guard_url = url.clone();
+    let feddit = Arc::new(Mutex::new(thread::spawn(|| {
+        feddit(guard, guard_streams, guard_url)
+    })));
 
     // Update Thread spawnen
     let guard = recievers.clone();
@@ -147,6 +160,7 @@ fn main() {
         let running_guard = running.clone();
         let feddit_guard = feddit.clone();
         let archive_guard = archive.clone();
+        let url_guard = url.clone();
         thread::spawn(move || match stream {
             Err(err) => {
                 eprint(
@@ -177,7 +191,7 @@ fn main() {
                             stream,
                             guard,
                             running_guard,
-                            url,
+                            url_guard,
                             posts_guard,
                             feddit_guard,
                             archive_guard
@@ -188,7 +202,7 @@ fn main() {
                             stream,
                             guard,
                             running_guard,
-                            url,
+                            url_guard,
                             posts_guard,
                             feddit_guard,
                             archive_guard
@@ -209,7 +223,7 @@ fn main() {
     }
 }
 
-fn print(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
+fn print(message: &str, streams: ArcMutex<Vec<TcpStream>>) {
     println!("{}", message);
 
     let mut streams_override_idxs = Vec::new();
@@ -233,7 +247,7 @@ fn print(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
     sleep(Duration::from_millis(1));
 }
 
-fn eprint(message: &str, streams: Arc<Mutex<Vec<TcpStream>>>) {
+fn eprint(message: &str, streams: ArcMutex<Vec<TcpStream>>) {
     eprintln!("{}", message);
 
     let mut streams_override_idxs = Vec::new();
@@ -265,7 +279,7 @@ fn chmod_to_non_root(filepath: &str) {
 }
 
 /// Wird ausgeführt nachdem stop empfangen wurde
-fn shutdown_preperations(streams: &Vec<TcpStream>, url: &str, posts: Arc<Mutex<Vec<i32>>>) {
+fn shutdown_preperations(streams: &Vec<TcpStream>, url: &str, posts: ArcMutex<Vec<i32>>) {
     for mut stream in streams {
         stream.write(b"Tschau :)").unwrap();
         stream.shutdown(std::net::Shutdown::Both).unwrap();
@@ -292,7 +306,7 @@ fn save(url: &str, posts: Vec<i32>) -> Result<(), std::io::Error> {
 }
 
 /// Funktion die vom Archive-Thread ausgeführt wird
-fn archive(running: Arc<Mutex<bool>>) {
+fn archive(running: ArcMutex<bool>) {
     loop {
         if unwrap_mutex_save!(running) == false {
             return;
@@ -301,12 +315,120 @@ fn archive(running: Arc<Mutex<bool>>) {
     }
 }
 
+fn get_url(url: &str) -> Result<blocking::Response, String> {
+    match blocking::get(url) {
+        Ok(response) => {
+            if response.status().is_success() {
+                Ok(response)
+            } else if response.status().is_server_error() {
+                return Err(format!(
+                    "Erfolg beim Fetchen von {}, aber Fehler vom Server: {} ({})",
+                    settings::FEDDIT_URL,
+                    response.status(),
+                    response
+                        .status()
+                        .canonical_reason()
+                        .unwrap_or("Keine weiteren Informationen")
+                ));
+            } else {
+                return Err(format!(
+                    "Erfolg beim Fetchen von {}, aber unerfolgreicher Status: {} ({})",
+                    settings::FEDDIT_URL,
+                    response.status(),
+                    response
+                        .status()
+                        .canonical_reason()
+                        .unwrap_or("Keine weiteren Informationen")
+                ));
+            }
+        }
+        Err(err) => {
+            return Err(format!(
+                "Fehler beim Fetchen von {}: {}",
+                settings::FEDDIT_URL,
+                err
+            ));
+        }
+    }
+}
+
 /// Funktion die vom Feddit-Thread ausgeführt wird
-fn feddit(running: Arc<Mutex<bool>>) {
+fn feddit(
+    running: ArcMutex<bool>,
+    streams: ArcMutex<Vec<TcpStream>>,
+    feddit_url: ArcMutex<String>,
+) {
     loop {
+        let guard = streams.clone();
         if unwrap_mutex_save!(running) == false {
             return;
         }
-        sleep(Duration::from_millis(50));
+
+        let fguard = feddit_url.clone();
+        let sguard = streams.clone();
+        let res = match list_posts(fguard) {
+            Ok(res) => res,
+            Err(err) => {
+                match err {
+                    ListPostsErr::U(err) => print(
+                        &format!("Fehler bei der Netzwerkverbindung: {}", err),
+                        sguard,
+                    ),
+                    ListPostsErr::I(err) => print(
+                        &format!("Fehler beim umwandeln der Feddit Response zu json: {}", err),
+                        sguard,
+                    ),
+                };
+                continue;
+            }
+        };
+
+        let guard = streams.clone();
+        print(&format!("Feddit Antwort: {:?}", res), guard);
+
+        let guard = running.clone();
+        if thread_sleep(settings::FEDDIT_FETCH_DELAY, guard) {
+            return;
+        }
     }
+}
+
+enum ListPostsErr {
+    U(ureq::Error),
+    I(io::Error),
+}
+
+fn list_posts(feddit_url: ArcMutex<String>) -> Result<GetPostsResponse, ListPostsErr> {
+    let params = GetPosts {
+        type_: Some(ListingType::Local),
+        sort: Some(SortType::New),
+        ..Default::default()
+    };
+
+    match Agent::new()
+        .get(&unwrap_mutex_save!(feddit_url))
+        .send_json(&params)
+    {
+        Ok(res) => match res.into_json() {
+            Ok(res) => Ok(res),
+            Err(err) => Err(ListPostsErr::I(err)),
+        },
+        Err(err) => Err(ListPostsErr::U(err)),
+    }
+}
+
+fn thread_sleep(duration: Duration, running: ArcMutex<bool>) -> bool {
+    let mini_sleep_amount = duration.as_millis() / 100;
+
+    for _ in 0..mini_sleep_amount {
+        if !unwrap_mutex_save!(running) {
+            return true;
+        }
+        sleep(Duration::from_millis(100));
+    }
+
+    sleep(Duration::from_millis(
+        (duration.as_millis() % 100).try_into().unwrap(),
+    ));
+    !unwrap_mutex_save!(running)
 }
